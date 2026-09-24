@@ -12,7 +12,7 @@ module "route53" {
 
   record_name = var.record_name
 
-  zone_id = data.aws_route53_zone.this.zone_id
+  zone_id = data.aws_route53_zone.neonlens.zone_id
 
   alb_dns_name = module.alb.alb_dns_name
   alb_zone_id  = module.alb.alb_zone_id
