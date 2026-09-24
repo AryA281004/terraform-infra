@@ -42,7 +42,7 @@ module "route53" {
 # EXISTING HOSTED ZONE
 # ============================================================
 
-data "aws_route53_zone" "this" {
+data "aws_route53_zone" "neonlens" {
   name         = var.domain_name
   private_zone = false
 }
