@@ -23,6 +23,10 @@ public_subnet_cidr = {
     cidr_block = "10.0.2.0/24"
     az         = "us-east-1b"
   }
+  public_subnet_1c = {
+    cidr_block = "10.0.3.0/24"
+    az         = "us-east-1c"
+  }
 }
 
 
@@ -37,6 +41,12 @@ private_subnet_cidr = {
     cidr_block      = "10.0.12.0/24"
     az              = "us-east-1b"
     nat_gateway_key = "public_subnet_1b"
+  }
+
+  private_subnet_1c = {
+    cidr_block      = "10.0.13.0/24"
+    az              = "us-east-1c"
+    nat_gateway_key = "public_subnet_1c"
   }
 }
 
