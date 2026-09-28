@@ -93,9 +93,9 @@ execution_secret_arns = []
 # ROUTE 53
 # ============================================================
 
-domain_name = "YOUR_DOMAIN"
+domain_name = "aryandudhat.qd.je"
 
-record_name = "api.YOUR_DOMAIN"
+record_name = "api.aryandudhat.qd.je"
 
 
 # ============================================================
