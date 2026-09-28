@@ -55,7 +55,7 @@ private_subnet_cidr = {
 # ECS
 # ============================================================
 
-container_image = "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/neonlens-backend:latest"
+container_image = "666729139368.dkr.ecr.us-east-1.amazonaws.com/neon-lens-backend:latest"
 
 container_port = 8000
 
