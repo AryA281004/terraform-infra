@@ -3,7 +3,7 @@
 # ============================================================
 
 module "ecs" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.1.2"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.2.0"
 
   environment = var.environment
   name        = var.project_name

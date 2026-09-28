@@ -166,7 +166,37 @@ output "cloudfront_url" {
 # CLOUDWATCH
 # ============================================================
 
+output "alb_4xx_alarm_name" {
+  description = "Name of the ALB 4XX CloudWatch alarm."
+  value       = module.cloudwatch_metrics.elb_4xx_alarm_name
+}
+
 output "alb_5xx_alarm_name" {
-  description = "ALB 5XX CloudWatch alarm."
-  value       = module.cloudwatch_metrics.alarm_name
+  description = "Name of the ALB 5XX CloudWatch alarm."
+  value       = module.cloudwatch_metrics.elb_5xx_alarm_name
+}
+
+output "target_4xx_alarm_name" {
+  description = "Name of the target 4XX CloudWatch alarm."
+  value       = module.cloudwatch_metrics.target_4xx_alarm_name
+}
+
+output "target_5xx_alarm_name" {
+  description = "Name of the target 5XX CloudWatch alarm."
+  value       = module.cloudwatch_metrics.target_5xx_alarm_name
+}
+
+output "ecs_cpu_alarm_name" {
+  description = "Name of the ECS CPU utilization alarm."
+  value       = module.cloudwatch_metrics.ecs_cpu_alarm_name
+}
+
+output "ecs_memory_alarm_name" {
+  description = "Name of the ECS memory utilization alarm."
+  value       = module.cloudwatch_metrics.ecs_memory_alarm_name
+}
+
+output "ecs_storage_alarm_name" {
+  description = "Name of the ECS ephemeral storage utilization alarm."
+  value       = module.cloudwatch_metrics.ecs_storage_alarm_name
 }
