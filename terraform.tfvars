@@ -98,7 +98,7 @@ execution_secret_arns = []
 # ============================================================
 
 domain_name    = "aryandudhat.qd.je"
-frontend_domain = "aryandudhat.qd.je"
+frontend_domain = "neonlens.aryandudhat.qd.je"
 backend_domain  = "api.aryandudhat.qd.je"
 
 # ============================================================
