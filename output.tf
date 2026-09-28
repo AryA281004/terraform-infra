@@ -87,9 +87,43 @@ output "ecs_log_group_name" {
 # ROUTE 53
 # ============================================================
 
+# ============================================================
+# ROUTE 53
+# ============================================================
+
+output "route53_hosted_zone_id" {
+  description = "Route 53 hosted zone ID."
+  value       = module.route53.hosted_zone_id
+}
+
+
+output "route53_hosted_zone_name" {
+  description = "Route 53 hosted zone name."
+  value       = module.route53.hosted_zone_name
+}
+
+
+output "frontend_dns_name" {
+  description = "Frontend Route 53 record."
+  value       = module.route53.record_fqdns["frontend"]
+}
+
+
 output "backend_dns_name" {
-  description = "Backend Route53 record."
+  description = "Backend Route 53 record."
   value       = module.route53.record_fqdns["backend"]
+}
+
+
+output "route53_record_names" {
+  description = "All Route 53 record names."
+  value       = module.route53.record_names
+}
+
+
+output "route53_record_fqdns" {
+  description = "All Route 53 record FQDNs."
+  value       = module.route53.record_fqdns
 }
 
 

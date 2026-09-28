@@ -93,10 +93,13 @@ execution_secret_arns = []
 # ROUTE 53
 # ============================================================
 
-domain_name = "aryandudhat.qd.je"
+# ============================================================
+# ROUTE 53
+# ============================================================
 
-record_name = "api.aryandudhat.qd.je"
-
+domain_name    = "aryandudhat.qd.je"
+frontend_domain = "aryandudhat.qd.je"
+backend_domain  = "api.aryandudhat.qd.je"
 
 # ============================================================
 # ALB HTTPS
@@ -111,13 +114,6 @@ acm_certificate_arn = null
 # ============================================================
 
 frontend_bucket_name = null
-
-
-# ============================================================
-# FRONTEND CLOUDFRONT
-# ============================================================
-
-frontend_domain = null
 
 # CloudFront ACM certificate MUST be in us-east-1.
 frontend_acm_certificate_arn = null
