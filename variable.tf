@@ -79,7 +79,7 @@ variable "container_image" {
 variable "container_port" {
   description = "Application container port."
   type        = number
-  default     = 8000
+  default     = 3000
 }
 
 

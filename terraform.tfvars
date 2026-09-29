@@ -57,7 +57,7 @@ private_subnet_cidr = {
 
 container_image = "666729139368.dkr.ecr.us-east-1.amazonaws.com/neon-lens-backend:latest"
 
-container_port = 8000
+container_port = 3000
 
 container_cpu    = 512
 container_memory = 1024
@@ -106,7 +106,7 @@ backend_domain  = "api.aryandudhat.qd.je"
 # ============================================================
 
 # ACM certificate must exist in us-east-1.
-acm_certificate_arn = null
+acm_certificate_arn = "arn:aws:acm:us-east-1:666729139368:certificate/d8ef7687-8ba6-4530-919e-fbcef8ea27a1"
 
 
 # ============================================================
@@ -116,7 +116,7 @@ acm_certificate_arn = null
 frontend_bucket_name = null
 
 # CloudFront ACM certificate MUST be in us-east-1.
-frontend_acm_certificate_arn = null
+frontend_acm_certificate_arn = "arn:aws:acm:us-east-1:666729139368:certificate/d8ef7687-8ba6-4530-919e-fbcef8ea27a1"
 
 
 # ============================================================
