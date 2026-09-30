@@ -240,3 +240,9 @@ variable "execution_secret_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "host_header_values" {
+  description = "List of host header values to match."
+  type        = list(string)
+  default     = []
+}
