@@ -2,8 +2,8 @@
 # GENERAL
 # ============================================================
 
-aws_region  = "us-east-1"
-environment = "prod"
+aws_region   = "us-east-1"
+environment  = "prod"
 project_name = "neonlens"
 
 
@@ -71,22 +71,60 @@ autoscaling_min_capacity = 2
 autoscaling_max_capacity = 6
 
 
+
+
 # ============================================================
 # BACKEND ENVIRONMENT
+
 # ============================================================
 
 container_environment = {
   NODE_ENV = "production"
+  PORT     = 3000
 }
 
 
 # ============================================================
 # BACKEND SECRETS
 # ============================================================
+container_secrets = {
+  
+  FRONTEND_URL = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
 
-container_secrets = {}
 
-execution_secret_arns = []
+  MONGO_URI = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+
+
+
+  REDIS_HOST     = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  REDIS_PASSWORD = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  REDIS_PORT     = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+
+
+  JWT_ACCESS_SECRET  = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  JWT_REFRESH_SECRET = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+
+
+  CLIENT_ID     = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  CLIENT_SECRET = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+
+
+  REFRESH_TOKEN = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  EMAIL_USER    = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+
+
+  CLOUDINARY_CLOUD_NAME = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  CLOUDINARY_API_KEY    = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  CLOUDINARY_API_SECRET = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+
+
+  IMAGEKIT_PUBLIC_KEY   = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  IMAGEKIT_PRIVATE_KEY  = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+  IMAGEKIT_URL_ENDPOINT = "arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK"
+
+}
+
+execution_secret_arns = ["arn:aws:secretsmanager:us-east-1:666729139368:secret:prod/neonlens/backend-W8TGOK*"]
 
 
 # ============================================================
@@ -97,7 +135,7 @@ execution_secret_arns = []
 # ROUTE 53
 # ============================================================
 
-domain_name    = "aryandudhat.qd.je"
+domain_name     = "aryandudhat.qd.je"
 frontend_domain = "neonlens.aryandudhat.qd.je"
 backend_domain  = "api.aryandudhat.qd.je"
 

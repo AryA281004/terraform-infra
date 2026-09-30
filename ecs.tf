@@ -3,7 +3,7 @@
 # ============================================================
 
 module "ecs" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.2.1"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.2.3"
 
   environment = var.environment
   name        = var.project_name
@@ -64,7 +64,7 @@ module "ecs" {
   # Avoid relying on curl being installed in the image.
   container_health_check_command = [
     "CMD-SHELL",
-    "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${var.container_port}/health')\""
+    "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${var.container_port}/login')\""
   ]
 
   container_health_check_interval     = 30
@@ -96,8 +96,8 @@ module "ecs" {
 
   wait_for_steady_state = true
 
-  enable_deployment_circuit_breaker = true
-  enable_deployment_rollback        = true
+  enable_deployment_circuit_breaker = false
+  enable_deployment_rollback        = false
 
   # ----------------------------------------------------------
   # ECS EXEC

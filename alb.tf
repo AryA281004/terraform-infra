@@ -3,7 +3,7 @@
 # ============================================================
 
 module "alb" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//alb?ref=v1.2.1"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//alb?ref=v1.2.3"
 
   environment = var.environment
   name        = var.project_name
@@ -32,7 +32,7 @@ module "alb" {
 
   target_group_protocol = "HTTP"
 
-  health_check_path     = "/health"
+  health_check_path     = "/login"
   health_check_protocol = "HTTP"
   health_check_matcher  = "200-399"
 

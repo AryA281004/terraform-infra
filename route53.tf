@@ -4,7 +4,7 @@
 
 locals {
   # AWS-owned hosted zone ID for all CloudFront distributions.
-  cloudfront_hosted_zone_id = "Z00242593S927K24D94XL"
+  hosted_zone_id = "Z00242593S927K24D94XL"
 }
 
 # Set to true only if the ALB is configured as dualstack.
@@ -29,7 +29,7 @@ data "aws_route53_zone" "neonlens" {
 # ============================================================
 
 module "route53" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//route53?ref=v1.2.1"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//route53?ref=v1.2.3"
 
   environment = var.environment
   name        = var.project_name
@@ -57,7 +57,7 @@ module "route53" {
 
         alias = {
           dns_name               = module.s3.cloudfront_domain_name
-          zone_id                = local.cloudfront_hosted_zone_id
+          zone_id                = "Z2FDTNDATAQYW2"
           evaluate_target_health = false
         }
       }
