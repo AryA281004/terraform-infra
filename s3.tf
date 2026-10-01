@@ -3,15 +3,14 @@
 # ============================================================
 
 module "s3" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//s3?ref=v1.2.5"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//s3?ref=v1.2.6"
 
   environment = var.environment
   name        = var.project_name
 
   bucket_name = var.frontend_bucket_name
 
-  force_destroy = false
-
+  force_destroy = true
   enable_versioning = true
 
   sse_algorithm = "AES256"
@@ -79,4 +78,5 @@ module "s3" {
   wait_for_deployment = true
 
   tags = local.common_tags
+  
 }
