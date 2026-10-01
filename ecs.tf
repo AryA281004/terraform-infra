@@ -5,9 +5,13 @@
 module "ecs" {
   source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.2.6"
 
-  environment = var.environment
+  environment = local.environment
   name        = var.project_name
-  aws_region  = var.aws_region
+  aws_region = lookup(
+    local.aws_region,
+    terraform.workspace,
+    "eu-north-1"
+  )
 
   tags = local.common_tags
 
@@ -64,7 +68,7 @@ module "ecs" {
   # Avoid relying on curl being installed in the image.
   container_health_check_command = [
     "CMD-SHELL",
-   "node -e \"require('http').get('http://localhost:3000/',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""
+    "node -e \"require('http').get('http://localhost:3000/',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""
   ]
 
   container_health_check_interval     = 30

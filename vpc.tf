@@ -5,7 +5,7 @@
 module "vpc" {
   source = "git::https://github.com/AryA281004/neonlens-tf-module.git//vpc?ref=v1.2.6"
 
-  environment = var.environment
+  environment = local.environment
   vpc_name    = var.project_name
 
   vpc_cidr = var.vpc_cidr
