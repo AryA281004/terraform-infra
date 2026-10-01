@@ -1,11 +1,15 @@
 provider "aws" {
-  region = var.aws_region
+  region = lookup(
+    local.aws_region,
+    terraform.workspace,
+    "eu-north-1"
+  )
 
   default_tags {
-    tags = {
-      Environment = var.environment
-      Project     = var.project_name
-      ManagedBy   = "Terraform"
-    }
+    tags = merge(
+      local.common_tags,
+      local.environment_tags
+      
+    )
   }
 }
