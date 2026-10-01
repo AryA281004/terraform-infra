@@ -5,14 +5,15 @@
 module "alb" {
   source = "git::https://github.com/AryA281004/neonlens-tf-module.git//alb?ref=v1.2.6"
 
-  environment = var.environment
+  environment = local.environment
   name        = var.project_name
 
   vpc_id = module.vpc.vpc_id
 
   alb_subnet_ids = [
     module.vpc.public_subnet_ids["public_subnet_1a"],
-    module.vpc.public_subnet_ids["public_subnet_1b"]
+    module.vpc.public_subnet_ids["public_subnet_1b"],
+    module.vpc.public_subnet_ids["public_subnet_1c"]
   ]
 
   alb_security_group_id = module.vpc.security_group_ids["alb-sg"]

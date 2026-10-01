@@ -2,26 +2,7 @@
 # GENERAL
 # ============================================================
 
-variable "aws_region" {
-  description = "AWS region."
-  type        = string
 
-  validation {
-    condition     = length(trimspace(var.aws_region)) > 0
-    error_message = "aws_region must not be empty."
-  }
-}
-
-
-variable "environment" {
-  description = "Deployment environment."
-  type        = string
-
-  validation {
-    condition     = length(trimspace(var.environment)) > 0
-    error_message = "environment must not be empty."
-  }
-}
 
 
 variable "project_name" {
