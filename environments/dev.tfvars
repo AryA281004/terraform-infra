@@ -23,39 +23,39 @@ host_header_values = [
 # ============================================================
 container_secrets = {
 
-  FRONTEND_URL = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:FRONTEND_URL::"
+  FRONTEND_URL = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:FRONTEND_URL::"
 
-  MONGO_URI = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:MONGO_URI::"
+  MONGO_URI = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:MONGO_URI::"
 
-  REDIS_HOST = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:REDIS_HOST::"
+  REDIS_HOST = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:REDIS_HOST::"
 
-  REDIS_PASSWORD = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:REDIS_PASSWORD::"
+  REDIS_PASSWORD = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:REDIS_PASSWORD::"
 
-  REDIS_PORT = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:REDIS_PORT::"
+  REDIS_PORT = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:REDIS_PORT::"
 
-  JWT_ACCESS_SECRET = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:JWT_ACCESS_SECRET::"
+  JWT_ACCESS_SECRET = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:JWT_ACCESS_SECRET::"
 
-  JWT_REFRESH_SECRET = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:JWT_REFRESH_SECRET::"
+  JWT_REFRESH_SECRET = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:JWT_REFRESH_SECRET::"
 
-  CLIENT_ID = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:CLIENT_ID::"
+  CLIENT_ID = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:CLIENT_ID::"
 
-  CLIENT_SECRET = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:CLIENT_SECRET::"
+  CLIENT_SECRET = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:CLIENT_SECRET::"
 
-  REFRESH_TOKEN = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:REFRESH_TOKEN::"
+  REFRESH_TOKEN = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:REFRESH_TOKEN::"
 
-  EMAIL_USER = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:EMAIL_USER::"
+  EMAIL_USER = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:EMAIL_USER::"
 
-  CLOUDINARY_CLOUD_NAME = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:CLOUDINARY_CLOUD_NAME::"
+  CLOUDINARY_CLOUD_NAME = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:CLOUDINARY_CLOUD_NAME::"
 
-  CLOUDINARY_API_KEY = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:CLOUDINARY_API_KEY::"
+  CLOUDINARY_API_KEY = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:CLOUDINARY_API_KEY::"
 
-  CLOUDINARY_API_SECRET = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:CLOUDINARY_API_SECRET::"
+  CLOUDINARY_API_SECRET = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:CLOUDINARY_API_SECRET::"
 
-  IMAGEKIT_PUBLIC_KEY = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:IMAGEKIT_PUBLIC_KEY::"
+  IMAGEKIT_PUBLIC_KEY = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:IMAGEKIT_PUBLIC_KEY::"
 
-  IMAGEKIT_PRIVATE_KEY = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:IMAGEKIT_PRIVATE_KEY::"
+  IMAGEKIT_PRIVATE_KEY = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:IMAGEKIT_PRIVATE_KEY::"
 
-  IMAGEKIT_URL_ENDPOINT = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK:IMAGEKIT_URL_ENDPOINT::"
+  IMAGEKIT_URL_ENDPOINT = "arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b:IMAGEKIT_URL_ENDPOINT::"
 }
 
-execution_secret_arns = ["arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-W8TGOK*"]
+execution_secret_arns = ["arn:aws:secretsmanager:eu-west-1:666729139368:secret:dev/neonlens/backend-2j7C2b*"]
