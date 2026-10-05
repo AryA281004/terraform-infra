@@ -15,16 +15,16 @@ vpc_cidr = "10.0.0.0/16"
 public_subnet_cidr = {
   public_subnet_1a = {
     cidr_block = "10.0.1.0/24"
-    az         = "us-east-1a"
+    az         = local.azs[local.environment][0]
   }
 
   public_subnet_1b = {
     cidr_block = "10.0.2.0/24"
-    az         = "us-east-1b"
+    az         = local.azs[local.environment][1]
   }
   public_subnet_1c = {
     cidr_block = "10.0.3.0/24"
-    az         = "us-east-1c"
+    az         = local.azs[local.environment][2]
   }
 }
 

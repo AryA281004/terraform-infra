@@ -1,3 +1,7 @@
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 locals {
   # ==========================================================
   # ENVIRONMENT
@@ -15,6 +19,12 @@ locals {
     dev  = "eu-west-1"
     pre  = "us-east-2"
     prod = "us-east-1"
+  }
+
+  azs = {
+    dev  = slice(data.aws_availability_zones.available.names, 0, 3)
+    pre  = slice(data.aws_availability_zones.available.names, 0, 3)
+    prod = slice(data.aws_availability_zones.available.names, 0, 3)
   }
 
   # ==========================================================
