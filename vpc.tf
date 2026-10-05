@@ -10,8 +10,8 @@ module "vpc" {
 
   vpc_cidr = var.vpc_cidr
 
-  public_subnet_cidr  = var.public_subnet_cidr
-  private_subnet_cidr = var.private_subnet_cidr
+  public_subnet_cidr  = local.public_subnet_cidr
+  private_subnet_cidr = local.private_subnet_cidr
 
   security_all_group = {
     alb-sg = {
