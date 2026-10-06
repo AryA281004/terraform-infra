@@ -23,7 +23,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  AWS_REGION: us-east-1
   TF_IN_AUTOMATION: true
   TF_INPUT: false
 
@@ -32,85 +31,159 @@ jobs:
     name: Terraform Plan - ${{ inputs.branch }}
     runs-on: ubuntu-latest
 
-    # IMPORTANT:
-    # Maps:
-    # dev  -> terraform-dev
-    # pre  -> terraform-pre
-    # prod -> terraform-prod
-    # main -> terraform-main
-    environment: terraform-${{ inputs.branch }}
+    environment: ${{ inputs.branch }}
 
     steps:
 
-      # ============================================================
-      # CHECKOUT
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Checkout selected branch
+      # ---------------------------------------------------------
       - name: Checkout selected branch
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch }}
           fetch-depth: 0
 
-      # ============================================================
-      # TERRAFORM
-      # ============================================================
+      # ---------------------------------------------------------
+      # Select AWS region based on environment
+      # ---------------------------------------------------------
+      - name: Set AWS region
+        shell: bash
+        run: |
+          set -e
 
+          case "${{ inputs.branch }}" in
+            dev)
+              echo "AWS_REGION=YOUR_DEV_REGION" >> "$GITHUB_ENV"
+              ;;
+
+            pre)
+              echo "AWS_REGION=YOUR_PRE_REGION" >> "$GITHUB_ENV"
+              ;;
+
+            prod)
+              echo "AWS_REGION=us-east-1" >> "$GITHUB_ENV"
+              ;;
+
+            main)
+              echo "AWS_REGION=YOUR_MAIN_REGION" >> "$GITHUB_ENV"
+              ;;
+
+            *)
+              echo "Unknown branch: ${{ inputs.branch }}"
+              exit 1
+              ;;
+          esac
+
+          echo "Selected environment: ${{ inputs.branch }}"
+
+      # ---------------------------------------------------------
+      # Show selected region
+      # ---------------------------------------------------------
+      - name: Verify selected AWS region
+        run: |
+          echo "Branch: ${{ inputs.branch }}"
+          echo "Environment: terraform-${{ inputs.branch }}"
+          echo "AWS Region: $AWS_REGION"
+
+      # ---------------------------------------------------------
+      # Setup Terraform
+      # ---------------------------------------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
-      # ============================================================
-      # AWS OIDC
-      # ============================================================
+      # ---------------------------------------------------------
+      # DEBUG ONLY
+      # Decode OIDC claims without exposing the JWT
+      # ---------------------------------------------------------
+      - name: Debug GitHub OIDC claims
+        shell: bash
+        run: |
+          set -e
 
+          TOKEN_RESPONSE=$(curl -sS \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")
+
+          TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.value')
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Failed to obtain GitHub OIDC token."
+            exit 1
+          fi
+
+          echo "GitHub OIDC claims:"
+
+          PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2)
+
+          # Add base64 padding if required
+          case $((${#PAYLOAD} % 4)) in
+            2) PAYLOAD="${PAYLOAD}==" ;;
+            3) PAYLOAD="${PAYLOAD}=" ;;
+          esac
+
+          echo "$PAYLOAD" \
+            | base64 -d 2>/dev/null \
+            | jq '{
+                iss,
+                aud,
+                sub,
+                repository,
+                repository_owner,
+                ref,
+                environment
+              }'
+
+      # ---------------------------------------------------------
+      # Configure AWS credentials using GitHub OIDC
+      # ---------------------------------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::666729139368:role/github-terraform
           aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-Terraform-${{ inputs.branch }}
 
-      # ============================================================
-      # VERIFY AWS IDENTITY
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Verify AWS identity
+      # ---------------------------------------------------------
       - name: Verify AWS identity
         run: |
+          echo "AWS Region: $AWS_REGION"
+          echo "AWS Identity:"
           aws sts get-caller-identity
 
-      # ============================================================
-      # TERRAFORM FORMAT CHECK
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Terraform Format Check
+      # ---------------------------------------------------------
       - name: Terraform Format Check
         run: |
           terraform fmt -check -recursive
 
-      # ============================================================
-      # TERRAFORM INIT
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Terraform Init
+      # ---------------------------------------------------------
       - name: Terraform Init
         run: |
           terraform init \
             -input=false \
             -upgrade
 
-      # ============================================================
-      # TERRAFORM VALIDATE
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Terraform Validate
+      # ---------------------------------------------------------
       - name: Terraform Validate
         run: |
           terraform validate
 
-      # ============================================================
-      # TERRAFORM PLAN
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Terraform Plan
+      # ---------------------------------------------------------
       - name: Terraform Plan
         id: terraform-plan
+        shell: bash
         run: |
           set -o pipefail
 
@@ -120,10 +193,9 @@ jobs:
             -no-color \
             2>&1 | tee plan-output.txt
 
-      # ============================================================
-      # CONVERT BINARY PLAN TO READABLE FORMAT
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Convert Terraform plan to readable format
+      # ---------------------------------------------------------
       - name: Convert plan to readable format
         if: always()
         run: |
@@ -131,16 +203,17 @@ jobs:
             terraform show \
               -no-color \
               plan.out > plan.txt
+
           elif [ -f plan-output.txt ]; then
             cp plan-output.txt plan.txt
+
           else
             echo "Terraform plan output was not generated." > plan.txt
           fi
 
-      # ============================================================
-      # GITHUB STEP SUMMARY
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # GitHub Actions Summary
+      # ---------------------------------------------------------
       - name: Add Terraform summary
         if: always()
         run: |
@@ -150,6 +223,7 @@ jobs:
             echo "**Repository:** \`${GITHUB_REPOSITORY}\`"
             echo "**Branch:** \`${{ inputs.branch }}\`"
             echo "**Environment:** \`terraform-${{ inputs.branch }}\`"
+            echo "**AWS Region:** \`${AWS_REGION}\`"
             echo "**Commit:** \`$(git rev-parse HEAD)\`"
             echo ""
             echo "### Plan Output"
@@ -164,10 +238,9 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # ============================================================
-      # UPLOAD PLAN ARTIFACT
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Upload Terraform plan artifact
+      # ---------------------------------------------------------
       - name: Upload Terraform plan artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -180,19 +253,20 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      # ============================================================
-      # SLACK NOTIFICATION
-      # ============================================================
-
+      # ---------------------------------------------------------
+      # Slack notification
+      # ---------------------------------------------------------
       - name: Send Terraform plan to Slack
         if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PLAN_URL }}
           PLAN_OUTCOME: ${{ steps.terraform-plan.outcome }}
           SELECTED_BRANCH: ${{ inputs.branch }}
+          SELECTED_REGION: ${{ env.AWS_REGION }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
+        shell: bash
         run: |
           python3 <<'PY'
           import json
@@ -202,6 +276,7 @@ jobs:
           webhook = os.environ["SLACK_WEBHOOK_URL"]
           outcome = os.environ["PLAN_OUTCOME"]
           branch = os.environ["SELECTED_BRANCH"]
+          region = os.environ["SELECTED_REGION"]
           run_url = os.environ["RUN_URL"]
           repository = os.environ["REPOSITORY"]
           commit_sha = os.environ["COMMIT_SHA"][:7]
@@ -251,6 +326,10 @@ jobs:
                           {
                               "type": "mrkdwn",
                               "text": f"*Branch:*\n`{branch}`"
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*AWS Region:*\n`{region}`"
                           },
                           {
                               "type": "mrkdwn",
