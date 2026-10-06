@@ -54,19 +54,15 @@ jobs:
 
           case "${{ inputs.branch }}" in
             dev)
-              echo "AWS_REGION=YOUR_DEV_REGION" >> "$GITHUB_ENV"
+              echo "AWS_REGION=eu-west-1" >> "$GITHUB_ENV"
               ;;
 
             pre)
-              echo "AWS_REGION=YOUR_PRE_REGION" >> "$GITHUB_ENV"
+              echo "AWS_REGION=us-east-2" >> "$GITHUB_ENV"
               ;;
 
             prod)
               echo "AWS_REGION=us-east-1" >> "$GITHUB_ENV"
-              ;;
-
-            main)
-              echo "AWS_REGION=YOUR_MAIN_REGION" >> "$GITHUB_ENV"
               ;;
 
             *)
