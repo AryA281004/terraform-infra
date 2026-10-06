@@ -235,7 +235,7 @@ jobs:
               -no-color \
               2>&1 | tee plan-output.txt
           else
-            ENV_FILE="../../environments${WORKSPACE}.tfvars"
+            ENV_FILE="../../environments/${WORKSPACE}.tfvars"
 
             echo "Using common variables: terraform.tfvars"
             echo "Using environment variables: $ENV_FILE"
