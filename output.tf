@@ -22,6 +22,11 @@ output "security_group_ids" {
   value       = module.vpc.security_group_ids
 }
 
+output "private_route_table_ids" {
+  description = "Private route table IDs."
+  value       = module.vpc.private_route_table_ids
+}
+
 
 # ============================================================
 # ALB
