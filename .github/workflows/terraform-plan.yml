@@ -212,6 +212,21 @@ jobs:
           terraform validate
 
       # ---------------------------------------------------------
+      # Passing Mongo Atlas Private public key to terraform
+      # ---------------------------------------------------------
+
+      - name: Set Terraform variables
+        shell: bash
+        env:
+          MONGODB_ATLAS_PUBLIC_KEY: ${{ secrets.MONGODB_ATLAS_PUBLIC_KEY }}
+          MONGODB_ATLAS_PRIVATE_KEY: ${{ secrets.MONGODB_ATLAS_PRIVATE_KEY }}
+        run: |
+          set -e
+
+          echo "TF_VAR_mongodb_atlas_public_key=$MONGODB_ATLAS_PUBLIC_KEY" >> "$GITHUB_ENV"
+          echo "TF_VAR_mongodb_atlas_private_key=$MONGODB_ATLAS_PRIVATE_KEY" >> "$GITHUB_ENV"
+
+      # ---------------------------------------------------------
       # Terraform Plan
       # ---------------------------------------------------------
       - name: Terraform Plan
