@@ -32,6 +32,14 @@ jobs:
     name: Terraform Plan - ${{ inputs.branch }}
     runs-on: ubuntu-latest
 
+    # IMPORTANT:
+    # Maps:
+    # dev  -> terraform-dev
+    # pre  -> terraform-pre
+    # prod -> terraform-prod
+    # main -> terraform-main
+    environment: terraform-${{ inputs.branch }}
+
     steps:
 
       # ============================================================
@@ -62,6 +70,14 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::666729139368:role/github-terraform
           aws-region: ${{ env.AWS_REGION }}
+
+      # ============================================================
+      # VERIFY AWS IDENTITY
+      # ============================================================
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
 
       # ============================================================
       # TERRAFORM FORMAT CHECK
@@ -105,7 +121,7 @@ jobs:
             2>&1 | tee plan-output.txt
 
       # ============================================================
-      # CONVERT BINARY PLAN TO READABLE PLAN
+      # CONVERT BINARY PLAN TO READABLE FORMAT
       # ============================================================
 
       - name: Convert plan to readable format
@@ -115,8 +131,10 @@ jobs:
             terraform show \
               -no-color \
               plan.out > plan.txt
-          else
+          elif [ -f plan-output.txt ]; then
             cp plan-output.txt plan.txt
+          else
+            echo "Terraform plan output was not generated." > plan.txt
           fi
 
       # ============================================================
@@ -131,14 +149,17 @@ jobs:
             echo ""
             echo "**Repository:** \`${GITHUB_REPOSITORY}\`"
             echo "**Branch:** \`${{ inputs.branch }}\`"
-            echo "**Commit:** \`${GITHUB_SHA}\`"
+            echo "**Environment:** \`terraform-${{ inputs.branch }}\`"
+            echo "**Commit:** \`$(git rev-parse HEAD)\`"
             echo ""
             echo "### Plan Output"
             echo ""
             echo '```text'
+
             if [ -f plan.txt ]; then
               head -c 60000 plan.txt
             fi
+
             echo ""
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
@@ -151,7 +172,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-plan-${{ inputs.branch }}-${{ github.run_number }}
+          name: terraform-plan-${{ inputs.branch }}-${{ github.run_id }}
           path: |
             plan.out
             plan.txt
@@ -198,9 +219,6 @@ jobs:
               emoji = "❌"
               title = "Terraform Plan Failed"
 
-          # Slack Block Kit has message-size limits.
-          # Keep the notification readable and point to the artifact
-          # for the complete plan.
           max_length = 22000
 
           if len(plan) > max_length:
