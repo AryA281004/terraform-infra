@@ -44,7 +44,7 @@ module "alb" {
   unhealthy_threshold = 3
 
   deregistration_delay = 30
-  host_header_values = var.host_header_values
+  host_header_values   = var.host_header_values
 
   tags = local.common_tags
 }

@@ -85,7 +85,7 @@ module "route53" {
     # Only create this if the ALB uses dualstack.
     # ----------------------------------------------------------
 
-    
+
   )
 
   tags = local.common_tags

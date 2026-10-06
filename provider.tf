@@ -9,7 +9,7 @@ provider "aws" {
     tags = merge(
       local.common_tags,
       local.environment_tags
-      
+
     )
   }
 }

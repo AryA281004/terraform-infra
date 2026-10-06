@@ -28,40 +28,40 @@ locals {
   }
 
   public_subnet_cidr = {
-  public_subnet_1a = {
-    cidr_block = "10.0.1.0/24"
-    az         = local.azs[local.environment][0]
+    public_subnet_1a = {
+      cidr_block = "10.0.1.0/24"
+      az         = local.azs[local.environment][0]
+    }
+
+    public_subnet_1b = {
+      cidr_block = "10.0.2.0/24"
+      az         = local.azs[local.environment][1]
+    }
+    public_subnet_1c = {
+      cidr_block = "10.0.3.0/24"
+      az         = local.azs[local.environment][2]
+    }
   }
 
-  public_subnet_1b = {
-    cidr_block = "10.0.2.0/24"
-    az         = local.azs[local.environment][1]
-  }
-  public_subnet_1c = {
-    cidr_block = "10.0.3.0/24"
-    az         = local.azs[local.environment][2]
-  }
-}
+  private_subnet_cidr = {
+    private_subnet_1a = {
+      cidr_block      = "10.0.11.0/24"
+      az              = local.azs[local.environment][0]
+      nat_gateway_key = "public_subnet_1a"
+    }
 
-private_subnet_cidr = {
-  private_subnet_1a = {
-    cidr_block      = "10.0.11.0/24"
-    az              = local.azs[local.environment][0]
-    nat_gateway_key = "public_subnet_1a"
-  }
+    private_subnet_1b = {
+      cidr_block      = "10.0.12.0/24"
+      az              = local.azs[local.environment][1]
+      nat_gateway_key = "public_subnet_1b"
+    }
 
-  private_subnet_1b = {
-    cidr_block      = "10.0.12.0/24"
-    az              = local.azs[local.environment][1]
-    nat_gateway_key = "public_subnet_1b"
+    private_subnet_1c = {
+      cidr_block      = "10.0.13.0/24"
+      az              = local.azs[local.environment][2]
+      nat_gateway_key = "public_subnet_1c"
+    }
   }
-
-  private_subnet_1c = {
-    cidr_block      = "10.0.13.0/24"
-    az              = local.azs[local.environment][2]
-    nat_gateway_key = "public_subnet_1c"
-  }
-}
 
   # ==========================================================
   # PROJECT

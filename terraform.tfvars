@@ -43,7 +43,7 @@ autoscaling_max_capacity = 6
 
 
 
-domain_name     = "aryandudhat.qd.je"
+domain_name = "aryandudhat.qd.je"
 
 
 

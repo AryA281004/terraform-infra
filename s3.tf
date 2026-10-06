@@ -10,7 +10,7 @@ module "s3" {
 
   bucket_name = var.frontend_bucket_name
 
-  force_destroy = true
+  force_destroy     = true
   enable_versioning = true
 
   sse_algorithm = "AES256"
@@ -78,5 +78,5 @@ module "s3" {
   wait_for_deployment = true
 
   tags = local.common_tags
-  
+
 }

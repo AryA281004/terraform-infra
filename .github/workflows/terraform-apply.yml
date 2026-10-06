@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
 
     environment:
-      name: terraform-${{ inputs.branch }}
+      name: ${{ inputs.branch }}
 
     steps:
       - name: Approval granted
