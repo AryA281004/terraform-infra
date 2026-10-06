@@ -65,7 +65,9 @@ jobs:
               echo "AWS_REGION=us-east-1" >> "$GITHUB_ENV"
               ;;
 
-           
+            main)
+              echo "AWS_REGION=us-east-1" >> "$GITHUB_ENV"
+              ;;
 
             *)
               echo "Unknown branch: ${{ inputs.branch }}"
