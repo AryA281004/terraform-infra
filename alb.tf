@@ -5,7 +5,7 @@
 module "alb" {
   source = "git::https://github.com/AryA281004/neonlens-tf-module.git//alb?ref=v1.3.1"
 
-  environment = local.environment
+  environment = var.environment
   name        = var.project_name
 
   vpc_id = module.vpc.vpc_id

@@ -31,7 +31,7 @@ data "aws_route53_zone" "neonlens" {
 module "route53" {
   source = "git::https://github.com/AryA281004/neonlens-tf-module.git//route53?ref=v1.3.1"
 
-  environment = local.environment
+  environment = var.environment
   name        = var.project_name
 
   # Required by the Route 53 module.

@@ -5,7 +5,7 @@
 module "cloudwatch_metrics" {
   source = "git::https://github.com/AryA281004/neonlens-tf-module.git//cloudwatch_metrics?ref=v1.3.1"
 
-  environment = local.environment
+  environment = var.environment
   name        = var.project_name
 
   enabled = true

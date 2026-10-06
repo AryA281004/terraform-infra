@@ -184,6 +184,27 @@ jobs:
             -upgrade
 
       # ---------------------------------------------------------
+      # Select Terraform workspace
+      # ---------------------------------------------------------
+      - name: Select Terraform workspace
+        shell: bash
+        run: |
+          set -e
+
+          WORKSPACE="${{ inputs.branch }}"
+
+          echo "Target Terraform workspace: $WORKSPACE"
+
+          if terraform workspace list | sed 's/^[* ]*//' | grep -Fxq "$WORKSPACE"; then
+            terraform workspace select "$WORKSPACE"
+          else
+            terraform workspace new "$WORKSPACE"
+          fi
+
+          echo "Current Terraform workspace:"
+          terraform workspace show   
+
+      # ---------------------------------------------------------
       # Terraform Validate
       # ---------------------------------------------------------
       - name: Terraform Validate
