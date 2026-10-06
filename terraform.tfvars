@@ -24,6 +24,7 @@ vpc_cidr = "10.0.0.0/16"
 
 
 
+
 container_port = 3000
 
 container_cpu    = 512
@@ -55,6 +56,7 @@ domain_name     = "aryandudhat.qd.je"
 
 frontend_bucket_name = null
 
+project_id = "project69cce2923d0b40967fb4be95"
 
 
 

@@ -207,3 +207,9 @@ variable "host_header_values" {
   type        = list(string)
   default     = []
 }
+
+variable "project_id" {
+  description = "MongoDB Atlas project ID."
+  type        = string
+  default     = null
+}

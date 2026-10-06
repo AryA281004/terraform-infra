@@ -3,6 +3,8 @@ container_environment = {
   PORT     = 3000
 }
 
+aws_account_id = "666729139368"
+
 container_image = "666729139368.dkr.ecr.eu-west-1.amazonaws.com/neon-lens-backend:latest"
 
 
