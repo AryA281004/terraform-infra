@@ -71,4 +71,3 @@ notification_email = null
 # HOST HEADER VALUES
 # ============================================================
 
-tags = local.common_tags

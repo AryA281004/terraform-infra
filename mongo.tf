@@ -38,5 +38,5 @@ module "mongodb_peering" {
 
   environment = var.environment
 
-  tags = var.tags
+  tags = local.common_tags
 }
