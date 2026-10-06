@@ -1,0 +1,297 @@
+name: Terraform Plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Select the branch to run Terraform plan against"
+        required: true
+        type: choice
+        options:
+          - dev
+          - pre
+          - prod
+          - main
+        default: prod
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-plan-${{ inputs.branch }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-1
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan - ${{ inputs.branch }}
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ============================================================
+      # CHECKOUT
+      # ============================================================
+
+      - name: Checkout selected branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      # ============================================================
+      # TERRAFORM
+      # ============================================================
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      # ============================================================
+      # AWS OIDC
+      # ============================================================
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::666729139368:role/github-terraform"
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ============================================================
+      # TERRAFORM FORMAT CHECK
+      # ============================================================
+
+      - name: Terraform Format Check
+        run: |
+          terraform fmt -check -recursive
+
+      # ============================================================
+      # TERRAFORM INIT
+      # ============================================================
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -input=false \
+            -upgrade
+
+      # ============================================================
+      # TERRAFORM VALIDATE
+      # ============================================================
+
+      - name: Terraform Validate
+        run: |
+          terraform validate
+
+      # ============================================================
+      # TERRAFORM PLAN
+      # ============================================================
+
+      - name: Terraform Plan
+        id: terraform-plan
+        run: |
+          set -o pipefail
+
+          terraform plan \
+            -out=plan.out \
+            -input=false \
+            -no-color \
+            2>&1 | tee plan-output.txt
+
+      # ============================================================
+      # CONVERT BINARY PLAN TO READABLE PLAN
+      # ============================================================
+
+      - name: Convert plan to readable format
+        if: always()
+        run: |
+          if [ -f plan.out ]; then
+            terraform show \
+              -no-color \
+              plan.out > plan.txt
+          else
+            cp plan-output.txt plan.txt
+          fi
+
+      # ============================================================
+      # GITHUB STEP SUMMARY
+      # ============================================================
+
+      - name: Add Terraform summary
+        if: always()
+        run: |
+          {
+            echo "## Terraform Plan"
+            echo ""
+            echo "**Repository:** \`${GITHUB_REPOSITORY}\`"
+            echo "**Branch:** \`${{ inputs.branch }}\`"
+            echo "**Commit:** \`${GITHUB_SHA}\`"
+            echo ""
+            echo "### Plan Output"
+            echo ""
+            echo '```text'
+            if [ -f plan.txt ]; then
+              head -c 60000 plan.txt
+            fi
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ============================================================
+      # UPLOAD PLAN ARTIFACT
+      # ============================================================
+
+      - name: Upload Terraform plan artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.branch }}-${{ github.run_number }}
+          path: |
+            plan.out
+            plan.txt
+            plan-output.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      # ============================================================
+      # SLACK NOTIFICATION
+      # ============================================================
+
+      - name: Send Terraform plan to Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PLAN_URL }}
+          PLAN_OUTCOME: ${{ steps.terraform-plan.outcome }}
+          SELECTED_BRANCH: ${{ inputs.branch }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          webhook = os.environ["SLACK_WEBHOOK_URL"]
+          outcome = os.environ["PLAN_OUTCOME"]
+          branch = os.environ["SELECTED_BRANCH"]
+          run_url = os.environ["RUN_URL"]
+          repository = os.environ["REPOSITORY"]
+          commit_sha = os.environ["COMMIT_SHA"][:7]
+
+          try:
+              with open("plan.txt", "r", encoding="utf-8") as file:
+                  plan = file.read()
+          except FileNotFoundError:
+              plan = "Terraform plan output was not generated."
+
+          if outcome == "success":
+              emoji = "✅"
+              title = "Terraform Plan Succeeded"
+          else:
+              emoji = "❌"
+              title = "Terraform Plan Failed"
+
+          # Slack Block Kit has message-size limits.
+          # Keep the notification readable and point to the artifact
+          # for the complete plan.
+          max_length = 22000
+
+          if len(plan) > max_length:
+              plan = (
+                  plan[:max_length]
+                  + "\n\n..."
+                  + "\n\nPlan output truncated in Slack."
+                  + "\nDownload the complete plan from GitHub Actions."
+              )
+
+          payload = {
+              "text": f"{emoji} {title} - {repository} - {branch}",
+
+              "blocks": [
+                  {
+                      "type": "header",
+                      "text": {
+                          "type": "plain_text",
+                          "text": f"{emoji} {title}"
+                      }
+                  },
+
+                  {
+                      "type": "section",
+                      "fields": [
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Repository:*\n`{repository}`"
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Branch:*\n`{branch}`"
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Commit:*\n`{commit_sha}`"
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Workflow:*\n<{run_url}|View workflow>"
+                          }
+                      ]
+                  },
+
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": "*Terraform Plan Output:*"
+                      }
+                  },
+
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": f"```{plan}```"
+                      }
+                  },
+
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": (
+                              "📦 The complete `plan.out`, `plan.txt`, "
+                              "and raw plan output are available in the "
+                              f"<{run_url}|GitHub Actions artifact>."
+                          )
+                      }
+                  }
+              ]
+          }
+
+          request = urllib.request.Request(
+              webhook,
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Content-Type": "application/json"
+              },
+              method="POST"
+          )
+
+          with urllib.request.urlopen(request) as response:
+              response_body = response.read().decode("utf-8")
+
+              if response.status < 200 or response.status >= 300:
+                  raise RuntimeError(
+                      f"Slack webhook failed: HTTP {response.status} - "
+                      f"{response_body}"
+                  )
+
+          print("Slack notification sent successfully.")
+          PY
