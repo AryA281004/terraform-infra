@@ -45,6 +45,18 @@ jobs:
           fetch-depth: 0
 
       # ---------------------------------------------------------
+      # Set Terraform variables
+      # ---------------------------------------------------------
+      - name: Set Terraform variables
+        shell: bash
+        run: |
+          set -e
+
+          echo "TF_VAR_environment=${{ inputs.branch }}" >> "$GITHUB_ENV"
+
+          echo "Terraform environment: ${{ inputs.branch }}"
+
+      # ---------------------------------------------------------
       # Select AWS region based on environment
       # ---------------------------------------------------------
       - name: Set AWS region
@@ -78,12 +90,13 @@ jobs:
           echo "Selected environment: ${{ inputs.branch }}"
 
       # ---------------------------------------------------------
-      # Show selected region
+      # Show selected configuration
       # ---------------------------------------------------------
-      - name: Verify selected AWS region
+      - name: Verify selected environment
         run: |
           echo "Branch: ${{ inputs.branch }}"
-          echo "Environment: terraform-${{ inputs.branch }}"
+          echo "Terraform Environment: $TF_VAR_environment"
+          echo "GitHub Environment: ${{ inputs.branch }}"
           echo "AWS Region: $AWS_REGION"
 
       # ---------------------------------------------------------
@@ -118,7 +131,6 @@ jobs:
 
           PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2)
 
-          # Add base64 padding if required
           case $((${#PAYLOAD} % 4)) in
             2) PAYLOAD="${PAYLOAD}==" ;;
             3) PAYLOAD="${PAYLOAD}=" ;;
@@ -222,7 +234,7 @@ jobs:
             echo ""
             echo "**Repository:** \`${GITHUB_REPOSITORY}\`"
             echo "**Branch:** \`${{ inputs.branch }}\`"
-            echo "**Environment:** \`terraform-${{ inputs.branch }}\`"
+            echo "**Environment:** \`${TF_VAR_environment}\`"
             echo "**AWS Region:** \`${AWS_REGION}\`"
             echo "**Commit:** \`$(git rev-parse HEAD)\`"
             echo ""

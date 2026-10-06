@@ -223,3 +223,44 @@ variable "mongodb_atlas_private_key" {
   type      = string
   sensitive = true
 }
+
+variable "mongodb_atlas_project_id" {
+  description = "MongoDB Atlas project ID"
+  type        = string
+  sensitive   = true
+}
+
+variable "mongodb_atlas_region" {
+  description = "MongoDB Atlas region"
+  type        = string
+}
+
+variable "mongodb_atlas_vpc_cidr" {
+  description = "MongoDB Atlas VPC CIDR"
+  type        = string
+}
+
+variable "aws_account_id" {
+  description = "AWS account ID"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+}
+
+variable "environment" {
+  description = "Deployment environment"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]+$", var.environment))
+    error_message = "environment must contain only lowercase letters, numbers, and hyphens."
+  }
+}
+
+variable "tags" {
+  description = "Common resource tags"
+  type        = map(string)
+}
