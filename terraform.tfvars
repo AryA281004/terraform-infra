@@ -46,7 +46,9 @@ autoscaling_max_capacity = 6
 domain_name = "aryandudhat.qd.je"
 
 
-
+mongodb_atlas_project_id = "project69cce2923d0b40967fb4be95"
+mongodb_atlas_region     = "us-east-1"
+mongodb_atlas_vpc_cidr   = "YOUR_ATLAS_VPC_CIDR"
 
 
 
@@ -56,7 +58,6 @@ domain_name = "aryandudhat.qd.je"
 
 frontend_bucket_name = null
 
-project_id = "project69cce2923d0b40967fb4be95"
 
 
 
