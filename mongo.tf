@@ -24,7 +24,7 @@ module "mongodb_peering" {
 
   aws_vpc_id = module.vpc.vpc_id
 
-  aws_vpc_cidr = var.vpc_cidr
+  aws_vpc_cidr = module.vpc.vpc_cidr
 
   # ----------------------------------------------------------
   # AWS private route tables
