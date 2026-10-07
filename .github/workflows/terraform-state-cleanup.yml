@@ -1,0 +1,585 @@
+name: Terraform State Refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Terraform environment to refresh"
+        required: true
+        type: choice
+        options:
+          - dev
+          - pre
+          - prod
+        default: prod
+
+permissions:
+  contents: read
+  id-token: write
+
+# Never cancel an active state operation.
+concurrency:
+  group: terraform-state-refresh-${{ inputs.branch }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+
+jobs:
+  # ============================================================
+  # APPROVAL
+  # ============================================================
+
+  approval:
+    name: Approval - State Refresh - ${{ inputs.branch }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.branch }}
+
+    steps:
+      - name: Approval granted
+        run: |
+          echo "Terraform state refresh approved."
+          echo "Environment: ${{ inputs.branch }}"
+
+
+  # ============================================================
+  # STATE REFRESH
+  # ============================================================
+
+  state-refresh:
+    name: Refresh Terraform State - ${{ inputs.branch }}
+    needs: approval
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.branch }}
+
+    steps:
+
+      # ----------------------------------------------------------
+      # CHECKOUT
+      # ----------------------------------------------------------
+
+      - name: Checkout selected branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+
+      # ----------------------------------------------------------
+      # ENVIRONMENT / AWS REGION
+      # ----------------------------------------------------------
+
+      - name: Set Terraform environment
+        shell: bash
+        run: |
+          set -e
+
+          WORKSPACE="${{ inputs.branch }}"
+
+          echo "TF_VAR_environment=$WORKSPACE" >> "$GITHUB_ENV"
+
+          case "$WORKSPACE" in
+            dev)
+              echo "AWS_REGION=eu-west-1" >> "$GITHUB_ENV"
+              ;;
+            pre)
+              echo "AWS_REGION=us-east-2" >> "$GITHUB_ENV"
+              ;;
+            prod)
+              echo "AWS_REGION=us-east-1" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Unsupported environment: $WORKSPACE"
+              exit 1
+              ;;
+          esac
+
+          echo "Environment : $WORKSPACE"
+          echo "AWS Region  : $AWS_REGION"
+
+
+      # ----------------------------------------------------------
+      # VERIFY FILES
+      # ----------------------------------------------------------
+
+      - name: Verify Terraform variable files
+        shell: bash
+        run: |
+          set -e
+
+          WORKSPACE="${{ inputs.branch }}"
+          ENV_FILE="environments/${WORKSPACE}.tfvars"
+
+          echo "Checking Terraform files..."
+
+          test -f terraform.tfvars || {
+            echo "ERROR: terraform.tfvars not found."
+            exit 1
+          }
+
+          test -f "$ENV_FILE" || {
+            echo "ERROR: $ENV_FILE not found."
+            exit 1
+          }
+
+          echo "Common variables:"
+          echo "  terraform.tfvars"
+
+          echo "Environment variables:"
+          echo "  $ENV_FILE"
+
+
+      # ----------------------------------------------------------
+      # TERRAFORM
+      # ----------------------------------------------------------
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+
+      # ----------------------------------------------------------
+      # OIDC DEBUG
+      # ----------------------------------------------------------
+
+      - name: Debug GitHub OIDC claims
+        shell: bash
+        run: |
+          set -e
+
+          TOKEN_RESPONSE=$(curl -sS \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")
+
+          TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.value')
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Failed to obtain GitHub OIDC token."
+            exit 1
+          fi
+
+          PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2)
+
+          case $((${#PAYLOAD} % 4)) in
+            2)
+              PAYLOAD="${PAYLOAD}=="
+              ;;
+            3)
+              PAYLOAD="${PAYLOAD}="
+              ;;
+          esac
+
+          echo "$PAYLOAD" |
+            base64 -d 2>/dev/null |
+            jq '{
+              iss,
+              aud,
+              sub,
+              repository,
+              repository_owner,
+              ref,
+              environment
+            }'
+
+
+      # ----------------------------------------------------------
+      # AWS
+      # ----------------------------------------------------------
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::666729139368:role/github-terraform
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-TerraformStateRefresh-${{ inputs.branch }}
+
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -e
+
+          echo "AWS Region:"
+          echo "$AWS_REGION"
+
+          echo ""
+          echo "AWS Identity:"
+          aws sts get-caller-identity
+
+
+      # ----------------------------------------------------------
+      # MONGODB ATLAS CREDENTIALS
+      # ----------------------------------------------------------
+
+      - name: Set MongoDB Atlas Terraform variables
+        shell: bash
+        env:
+          MONGODB_ATLAS_PUBLIC_KEY: ${{ secrets.MONGODB_ATLAS_PUBLIC_KEY }}
+          MONGODB_ATLAS_PRIVATE_KEY: ${{ secrets.MONGODB_ATLAS_PRIVATE_KEY }}
+        run: |
+          set -e
+
+          if [ -z "$MONGODB_ATLAS_PUBLIC_KEY" ]; then
+            echo "ERROR: MONGODB_ATLAS_PUBLIC_KEY is missing."
+            exit 1
+          fi
+
+          if [ -z "$MONGODB_ATLAS_PRIVATE_KEY" ]; then
+            echo "ERROR: MONGODB_ATLAS_PRIVATE_KEY is missing."
+            exit 1
+          fi
+
+          echo "TF_VAR_mongodb_atlas_public_key=$MONGODB_ATLAS_PUBLIC_KEY" >> "$GITHUB_ENV"
+          echo "TF_VAR_mongodb_atlas_private_key=$MONGODB_ATLAS_PRIVATE_KEY" >> "$GITHUB_ENV"
+
+          echo "MongoDB Atlas credentials exported."
+
+
+      # ----------------------------------------------------------
+      # TERRAFORM FORMAT
+      # ----------------------------------------------------------
+
+      - name: Terraform Format Check
+        run: |
+          terraform fmt -check -recursive
+
+
+      # ----------------------------------------------------------
+      # TERRAFORM INIT
+      # ----------------------------------------------------------
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -input=false \
+            -upgrade
+
+
+      # ----------------------------------------------------------
+      # TERRAFORM WORKSPACE
+      # ----------------------------------------------------------
+
+      - name: Select Terraform workspace
+        shell: bash
+        run: |
+          set -e
+
+          WORKSPACE="${{ inputs.branch }}"
+
+          echo "Selecting Terraform workspace: $WORKSPACE"
+
+          if terraform workspace list |
+            sed 's/^[* ]*//' |
+            grep -Fxq "$WORKSPACE"; then
+
+            terraform workspace select "$WORKSPACE"
+
+          else
+
+            echo "ERROR: Terraform workspace '$WORKSPACE' does not exist."
+            echo ""
+            echo "Available workspaces:"
+            terraform workspace list
+
+            exit 1
+
+          fi
+
+          echo ""
+          echo "Current Terraform workspace:"
+          terraform workspace show
+
+
+      # ----------------------------------------------------------
+      # VALIDATE
+      # ----------------------------------------------------------
+
+      - name: Terraform Validate
+        run: |
+          terraform validate
+
+
+      # ==========================================================
+      # STATE BEFORE REFRESH
+      # ==========================================================
+
+      - name: Capture state before refresh
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "STATE BEFORE REFRESH"
+          echo "=========================================="
+
+          terraform state list > state-before.txt
+
+          echo ""
+          echo "Tracked resources:"
+          cat state-before.txt || true
+
+          echo ""
+          echo "Resource count:"
+          wc -l < state-before.txt
+
+          echo ""
+          echo "Pulling Terraform state..."
+
+          terraform state pull > state-before.json
+
+          echo ""
+          echo "State metadata:"
+
+          jq '{
+            terraform_version,
+            serial,
+            lineage,
+            resources: (.resources | length),
+            check_results: ((.check_results // []) | length)
+          }' state-before.json
+
+
+      # ==========================================================
+      # REFRESH-ONLY PLAN
+      # ==========================================================
+
+      - name: Terraform Refresh-Only Plan
+        id: refresh-plan
+        shell: bash
+        run: |
+          set -o pipefail
+
+          WORKSPACE="${{ inputs.branch }}"
+          ENV_FILE="environments/${WORKSPACE}.tfvars"
+
+          echo "=========================================="
+          echo "TERRAFORM REFRESH-ONLY PLAN"
+          echo "=========================================="
+
+          echo "Workspace:"
+          echo "$WORKSPACE"
+
+          echo ""
+          echo "Variable files:"
+          echo "  terraform.tfvars"
+          echo "  $ENV_FILE"
+
+          echo ""
+
+          terraform plan \
+            -refresh-only \
+            -var-file="terraform.tfvars" \
+            -var-file="$ENV_FILE" \
+            -out=refresh.out \
+            -input=false \
+            -no-color \
+            2>&1 | tee refresh-output.txt
+
+
+      # ----------------------------------------------------------
+      # SHOW REFRESH PLAN
+      # ----------------------------------------------------------
+
+      - name: Show refresh-only plan
+        if: always()
+        shell: bash
+        run: |
+          if [ -f refresh.out ]; then
+
+            terraform show \
+              -no-color \
+              refresh.out > refresh-plan.txt
+
+          elif [ -f refresh-output.txt ]; then
+
+            cp refresh-output.txt refresh-plan.txt
+
+          else
+
+            echo "Refresh-only plan was not generated." > refresh-plan.txt
+
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "REFRESH-ONLY PLAN"
+          echo "=========================================="
+
+          cat refresh-plan.txt
+
+
+      # ==========================================================
+      # APPLY REFRESH-ONLY PLAN
+      # ==========================================================
+
+      - name: Apply refresh-only state update
+        id: refresh-apply
+        shell: bash
+        run: |
+          set -e
+
+          if [ ! -f refresh.out ]; then
+            echo "ERROR: refresh.out does not exist."
+            exit 1
+          fi
+
+          echo "=========================================="
+          echo "APPLYING REFRESH-ONLY PLAN"
+          echo "=========================================="
+
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            refresh.out
+
+
+      # ==========================================================
+      # STATE AFTER REFRESH
+      # ==========================================================
+
+      - name: Capture state after refresh
+        if: always()
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "STATE AFTER REFRESH"
+          echo "=========================================="
+
+          terraform state pull > state-after.json
+
+          terraform state list > state-after.txt || true
+
+          echo ""
+          echo "State metadata:"
+
+          jq '{
+            terraform_version,
+            serial,
+            lineage,
+            resources: (.resources | length),
+            check_results: ((.check_results // []) | length)
+          }' state-after.json
+
+          echo ""
+          echo "Tracked resources after refresh:"
+          cat state-after.txt || true
+
+          echo ""
+          echo "Resource count after refresh:"
+          wc -l < state-after.txt || true
+
+
+      # ==========================================================
+      # COMPARE STATE
+      # ==========================================================
+
+      - name: Compare state before and after
+        if: always()
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "STATE COMPARISON"
+          echo "=========================================="
+
+          BEFORE=$(wc -l < state-before.txt 2>/dev/null || echo 0)
+          AFTER=$(wc -l < state-after.txt 2>/dev/null || echo 0)
+
+          echo "Resources before refresh: $BEFORE"
+          echo "Resources after refresh : $AFTER"
+
+          echo ""
+          echo "Resources added to state:"
+          comm -13 \
+            <(sort state-before.txt) \
+            <(sort state-after.txt) || true
+
+          echo ""
+          echo "Resources removed from state:"
+          comm -23 \
+            <(sort state-before.txt) \
+            <(sort state-after.txt) || true
+
+
+      # ==========================================================
+      # GITHUB SUMMARY
+      # ==========================================================
+
+      - name: Add GitHub summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Terraform State Refresh"
+            echo ""
+            echo "| Property | Value |"
+            echo "|---|---|"
+            echo "| Repository | \`$GITHUB_REPOSITORY\` |"
+            echo "| Environment | \`${{ inputs.branch }}\` |"
+            echo "| AWS Region | \`$AWS_REGION\` |"
+            echo "| Workspace | \`$(terraform workspace show)\` |"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo ""
+            echo "## Result"
+            echo ""
+
+            if [ "${{ steps.refresh-apply.outcome }}" = "success" ]; then
+              echo "### State refresh completed successfully"
+            else
+              echo "### State refresh failed"
+            fi
+
+            echo ""
+            echo "## State Metadata After Refresh"
+            echo ""
+            echo '```json'
+
+            if [ -f state-after.json ]; then
+              jq '{
+                terraform_version,
+                serial,
+                lineage,
+                resources: (.resources | length),
+                check_results: ((.check_results // []) | length)
+              }' state-after.json
+            fi
+
+            echo '```'
+            echo ""
+            echo "## Refresh-Only Plan"
+            echo ""
+            echo '```text'
+
+            if [ -f refresh-plan.txt ]; then
+              head -c 60000 refresh-plan.txt
+            fi
+
+            echo ""
+            echo '```'
+
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+      # ==========================================================
+      # UPLOAD DIAGNOSTICS
+      # ==========================================================
+
+      - name: Upload state refresh diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-state-refresh-${{ inputs.branch }}-${{ github.run_id }}
+          path: |
+            state-before.json
+            state-before.txt
+            refresh.out
+            refresh-output.txt
+            refresh-plan.txt
+            state-after.json
+            state-after.txt
+          if-no-files-found: warn
+          retention-days: 7
+
