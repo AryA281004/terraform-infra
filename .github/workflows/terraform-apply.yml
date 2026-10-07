@@ -273,12 +273,13 @@ jobs:
       # Download exact Terraform plan artifact
       # ----------------------------------------------------------
 
-      - name: Download Terraform plan
+      - name: Download Terraform Plan
         uses: actions/download-artifact@v4
         with:
           name: terraform-plan-${{ inputs.branch }}-${{ inputs.plan_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ inputs.plan_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: .
 
       # ----------------------------------------------------------
       # Verify Terraform plan files
