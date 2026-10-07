@@ -3,6 +3,8 @@ container_environment = {
   PORT     = 3000
 }
 
+vpc_cidr = "10.0.0.0/16"
+
 aws_region = "eu-west-1"
 
 aws_account_id = "666729139368"
