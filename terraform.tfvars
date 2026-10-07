@@ -48,7 +48,7 @@ domain_name = "aryandudhat.qd.je"
 
 mongodb_atlas_project_id = "69cce2923d0b40967fb4be95"
 mongodb_atlas_region     = "us-east-1"
-mongodb_atlas_vpc_cidr   = "192.168.240.0/21"
+mongodb_atlas_vpc_cidr   = "192.168.248.0/21"
 
 
 
