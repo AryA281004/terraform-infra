@@ -177,6 +177,50 @@ jobs:
             -input=false \
             -upgrade
 
+      - name: Diagnose Terraform backend and state
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "============================================================"
+          echo "Terraform Version"
+          echo "============================================================"
+          terraform version
+
+          echo
+          echo "============================================================"
+          echo "Current Workspace"
+          echo "============================================================"
+          terraform workspace show
+
+          echo
+          echo "============================================================"
+          echo "Available Workspaces"
+          echo "============================================================"
+          terraform workspace list
+
+          echo
+          echo "============================================================"
+          echo "Terraform State List"
+          echo "============================================================"
+          terraform state list || true
+
+          echo
+          echo "============================================================"
+          echo "Terraform State Pull Metadata"
+          echo "============================================================"
+
+          terraform state pull > /tmp/current-state.json
+
+          jq '{
+            version,
+            terraform_version,
+            serial,
+            lineage,
+            resource_count: (.resources | length),
+            check_results_count: (.check_results // [] | length)
+          }' /tmp/current-state.json
+
       # ---------------------------------------------------------
       # Select existing workspace
       # ---------------------------------------------------------
