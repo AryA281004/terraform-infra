@@ -243,6 +243,47 @@ jobs:
           echo "Current Terraform workspace:"
           terraform workspace show
 
+      - name: Diagnose Terraform State
+        shell: bash
+        run: |
+         set -euo pipefail
+
+         echo "=========================================="
+         echo "WORKSPACE"
+         echo "=========================================="
+         terraform workspace show
+
+         echo
+         echo "=========================================="
+         echo "BACKEND CONFIGURATION"
+         echo "=========================================="
+         terraform state pull > current-state.json
+
+         python - <<'PY'
+         import json
+
+         with open("current-state.json") as f:
+             state = json.load(f)
+
+         print("Terraform version :", state.get("terraform_version"))
+         print("Serial            :", state.get("serial"))
+         print("Lineage           :", state.get("lineage"))
+         print("Resources         :", len(state.get("resources", [])))
+
+         print("\nResources:")
+         for resource in state.get("resources", []):
+             print(
+                 f"- {resource.get('module', '')}"
+                 f"{resource.get('type')}.{resource.get('name')}"
+             )
+         PY
+
+         echo
+         echo "=========================================="
+         echo "TERRAFORM WORKSPACES"
+         echo "=========================================="
+         terraform workspace list
+
       # ---------------------------------------------------------
       # Capture state BEFORE refresh
       # ---------------------------------------------------------
