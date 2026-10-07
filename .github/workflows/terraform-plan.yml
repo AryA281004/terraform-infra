@@ -324,27 +324,28 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      
       # ---------------------------------------------------------
       # Slack notification
       # ---------------------------------------------------------
       - name: Send Terraform plan to Slack
         if: always()
+        shell: bash
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PLAN_URL }}
           PLAN_OUTCOME: ${{ steps.terraform-plan.outcome }}
           SELECTED_BRANCH: ${{ inputs.branch }}
-          SELECTED_ENVIRONMENT: ${{ inputs.environment }}
+          SELECTED_ENVIRONMENT: ${{ inputs.branch }}
           SELECTED_REGION: ${{ env.AWS_REGION }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
-        shell: bash
         run: |
           python3 <<'PY'
           import json
           import os
-          import urllib.request
           import urllib.error
+          import urllib.request
 
           webhook = os.environ["SLACK_WEBHOOK_URL"]
           outcome = os.environ["PLAN_OUTCOME"]
@@ -356,19 +357,8 @@ jobs:
           commit_sha = os.environ["COMMIT_SHA"][:7]
 
           # -----------------------------------------------------
-          # Read Terraform output
-          # -----------------------------------------------------
-
-          try:
-              with open("plan.txt", "r", encoding="utf-8") as file:
-                  plan = file.read()
-          except FileNotFoundError:
-              plan = "Terraform plan output was not generated."
-
-          # -----------------------------------------------------
           # Status
           # -----------------------------------------------------
-
           if outcome == "success":
               emoji = "✅"
               title = "Terraform Plan Succeeded"
@@ -377,138 +367,74 @@ jobs:
               title = "Terraform Plan Failed"
 
           # -----------------------------------------------------
-          # Slack section text limit is 3000 characters.
-          #
-          # Keep chunks safely below that limit.
+          # Slack message
           # -----------------------------------------------------
-
-          CHUNK_SIZE = 2800
-
-          plan_chunks = [
-              plan[i:i + CHUNK_SIZE]
-              for i in range(0, len(plan), CHUNK_SIZE)
-          ]
-
-          if not plan_chunks:
-              plan_chunks = ["Terraform plan output was empty."]
-
-          # -----------------------------------------------------
-          # Slack allows a maximum of 50 blocks.
-          #
-          # Keep enough room for header/metadata/footer.
-          # -----------------------------------------------------
-
-          MAX_PLAN_CHUNKS = 45
-
-          if len(plan_chunks) > MAX_PLAN_CHUNKS:
-              plan_chunks = plan_chunks[:MAX_PLAN_CHUNKS]
-
-              plan_chunks[-1] += (
-                  "\n\n..."
-                  "\nPlan output truncated."
-                  f"\nComplete output: {run_url}"
-              )
-
-          # -----------------------------------------------------
-          # Base blocks
-          # -----------------------------------------------------
-
           blocks = [
               {
                   "type": "header",
-                  "text": {
-                      "type": "plain_text",
-                      "text": f"{emoji} {title}"
-                  }
+                  "text": {"type": "plain_text", "text": f"{emoji} {title}"},
               },
               {
                   "type": "section",
                   "fields": [
                       {
-                          "type": "mrkdwn",
-                          "text": f"*Repository:*\n`{repository}`"
+                        "type": "mrkdwn", 
+                        "text": f"*Repository:*\n`{repository}`"
                       },
                       {
-                          "type": "mrkdwn",
-                          "text": f"*Branch:*\n`{branch}`"
+                        "type": "mrkdwn", 
+                        "text": f"*Branch:*\n`{branch}`"
                       },
                       {
-                          "type": "mrkdwn",
-                          "text": f"*AWS Region:*\n`{region}`"
+                        "type": "mrkdwn", 
+                        "text": f"*Environment:*\n`{environment}`"
                       },
                       {
-                          "type": "mrkdwn",
-                          "text": f"*Commit:*\n`{commit_sha}`"
+                        "type": "mrkdwn", 
+                        "text": f"*AWS Region:*\n`{region}`"
                       },
                       {
-                          "type": "mrkdwn",
-                          "text": f"*Workflow:*\n<{run_url}|View workflow>"
-                      }
-                  ]
+                        "type": "mrkdwn", 
+                        "text": f"*Commit:*\n`{commit_sha}`"
+                      },
+                  ],
               },
-              {
-                  "type": "section",
-                  "text": {
-                      "type": "mrkdwn",
-                      "text": "*Terraform Plan Output:*"
-                  }
-              }
-          ]
-
-          # -----------------------------------------------------
-          # Add plan in multiple valid Slack blocks
-          # -----------------------------------------------------
-
-          for index, chunk in enumerate(plan_chunks, start=1):
-
-              prefix = ""
-
-              if len(plan_chunks) > 1:
-                  prefix = f"*Plan part {index}/{len(plan_chunks)}*\n"
-
-              blocks.append(
-                  {
-                      "type": "section",
-                      "text": {
-                          "type": "mrkdwn",
-                          "text": f"{prefix}```{chunk}```"
-                      }
-                  }
-              )
-
-          # -----------------------------------------------------
-          # Footer
-          # -----------------------------------------------------
-
-          blocks.append(
               {
                   "type": "section",
                   "text": {
                       "type": "mrkdwn",
                       "text": (
-                          "📦 Complete Terraform artifacts are available "
-                          f"in the <{run_url}|GitHub Actions run>."
-                      )
-                  }
-              }
-          )
+                          "*Terraform Plan:*\n"
+                          "The complete `plan.txt` file is available in the "
+                          f"<{run_url}|GitHub Actions artifacts>."
+                      ),
+                  },
+              },
+              {
+                  "type": "actions",
+                  "elements": [
+                      {
+                          "type": "button",
+                          "text": {"type": "plain_text", "text": "View Workflow"},
+                          "url": run_url,
+                      }
+                  ],
+              },
+          ]
 
           payload = {
               "text": f"{emoji} {title} - {repository} - {branch}",
-              "blocks": blocks
+              "blocks": blocks,
           }
 
           # -----------------------------------------------------
           # Send to Slack
           # -----------------------------------------------------
-
           request = urllib.request.Request(
               webhook,
               data=json.dumps(payload).encode("utf-8"),
-              headers={
-                  "Content-Type": "application/json"
-              },
-              method="POST"
+              headers={"Content-Type": "application/json"},
+              method="POST",
           )
 
           try:
@@ -517,8 +443,7 @@ jobs:
 
                   if response.status < 200 or response.status >= 300:
                       raise RuntimeError(
-                          f"Slack webhook failed: "
-                          f"HTTP {response.status} - {response_body}"
+                          f"Slack webhook failed: HTTP {response.status} - {response_body}"
                       )
 
                   print("Slack notification sent successfully.")
@@ -526,11 +451,6 @@ jobs:
 
           except urllib.error.HTTPError as error:
               response_body = error.read().decode("utf-8", errors="replace")
-
-              print(
-                  f"Slack webhook failed: HTTP {error.code} - "
-                  f"{response_body}"
-              )
-
+              print(f"Slack webhook failed: HTTP {error.code} - {response_body}")
               raise
           PY
