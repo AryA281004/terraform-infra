@@ -333,6 +333,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PLAN_URL }}
           PLAN_OUTCOME: ${{ steps.terraform-plan.outcome }}
           SELECTED_BRANCH: ${{ inputs.branch }}
+          SELECTED_ENVIRONMENT: ${{ inputs.environment }}
           SELECTED_REGION: ${{ env.AWS_REGION }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           REPOSITORY: ${{ github.repository }}
@@ -343,20 +344,30 @@ jobs:
           import json
           import os
           import urllib.request
+          import urllib.error
 
           webhook = os.environ["SLACK_WEBHOOK_URL"]
           outcome = os.environ["PLAN_OUTCOME"]
           branch = os.environ["SELECTED_BRANCH"]
+          environment = os.environ["SELECTED_ENVIRONMENT"]
           region = os.environ["SELECTED_REGION"]
           run_url = os.environ["RUN_URL"]
           repository = os.environ["REPOSITORY"]
           commit_sha = os.environ["COMMIT_SHA"][:7]
+
+          # -----------------------------------------------------
+          # Read Terraform output
+          # -----------------------------------------------------
 
           try:
               with open("plan.txt", "r", encoding="utf-8") as file:
                   plan = file.read()
           except FileNotFoundError:
               plan = "Terraform plan output was not generated."
+
+          # -----------------------------------------------------
+          # Status
+          # -----------------------------------------------------
 
           if outcome == "success":
               emoji = "✅"
@@ -365,83 +376,131 @@ jobs:
               emoji = "❌"
               title = "Terraform Plan Failed"
 
-          max_length = 22000
+          # -----------------------------------------------------
+          # Slack section text limit is 3000 characters.
+          #
+          # Keep chunks safely below that limit.
+          # -----------------------------------------------------
 
-          if len(plan) > max_length:
-              plan = (
-                  plan[:max_length]
-                  + "\n\n..."
-                  + "\n\nPlan output truncated in Slack."
-                  + "\nDownload the complete plan from GitHub Actions."
+          CHUNK_SIZE = 2800
+
+          plan_chunks = [
+              plan[i:i + CHUNK_SIZE]
+              for i in range(0, len(plan), CHUNK_SIZE)
+          ]
+
+          if not plan_chunks:
+              plan_chunks = ["Terraform plan output was empty."]
+
+          # -----------------------------------------------------
+          # Slack allows a maximum of 50 blocks.
+          #
+          # Keep enough room for header/metadata/footer.
+          # -----------------------------------------------------
+
+          MAX_PLAN_CHUNKS = 45
+
+          if len(plan_chunks) > MAX_PLAN_CHUNKS:
+              plan_chunks = plan_chunks[:MAX_PLAN_CHUNKS]
+
+              plan_chunks[-1] += (
+                  "\n\n..."
+                  "\nPlan output truncated."
+                  f"\nComplete output: {run_url}"
               )
+
+          # -----------------------------------------------------
+          # Base blocks
+          # -----------------------------------------------------
+
+          blocks = [
+              {
+                  "type": "header",
+                  "text": {
+                      "type": "plain_text",
+                      "text": f"{emoji} {title}"
+                  }
+              },
+              {
+                  "type": "section",
+                  "fields": [
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Repository:*\n`{repository}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Branch:*\n`{branch}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*AWS Region:*\n`{region}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Commit:*\n`{commit_sha}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Workflow:*\n<{run_url}|View workflow>"
+                      }
+                  ]
+              },
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": "*Terraform Plan Output:*"
+                  }
+              }
+          ]
+
+          # -----------------------------------------------------
+          # Add plan in multiple valid Slack blocks
+          # -----------------------------------------------------
+
+          for index, chunk in enumerate(plan_chunks, start=1):
+
+              prefix = ""
+
+              if len(plan_chunks) > 1:
+                  prefix = f"*Plan part {index}/{len(plan_chunks)}*\n"
+
+              blocks.append(
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": f"{prefix}```{chunk}```"
+                      }
+                  }
+              )
+
+          # -----------------------------------------------------
+          # Footer
+          # -----------------------------------------------------
+
+          blocks.append(
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": (
+                          "📦 Complete Terraform artifacts are available "
+                          f"in the <{run_url}|GitHub Actions run>."
+                      )
+                  }
+              }
+          )
 
           payload = {
               "text": f"{emoji} {title} - {repository} - {branch}",
-
-              "blocks": [
-                  {
-                      "type": "header",
-                      "text": {
-                          "type": "plain_text",
-                          "text": f"{emoji} {title}"
-                      }
-                  },
-
-                  {
-                      "type": "section",
-                      "fields": [
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*Repository:*\n`{repository}`"
-                          },
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*Branch:*\n`{branch}`"
-                          },
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*AWS Region:*\n`{region}`"
-                          },
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*Commit:*\n`{commit_sha}`"
-                          },
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*Workflow:*\n<{run_url}|View workflow>"
-                          }
-                      ]
-                  },
-
-                  {
-                      "type": "section",
-                      "text": {
-                          "type": "mrkdwn",
-                          "text": "*Terraform Plan Output:*"
-                      }
-                  },
-
-                  {
-                      "type": "section",
-                      "text": {
-                          "type": "mrkdwn",
-                          "text": f"```{plan}```"
-                      }
-                  },
-
-                  {
-                      "type": "section",
-                      "text": {
-                          "type": "mrkdwn",
-                          "text": (
-                              "📦 The complete `plan.out`, `plan.txt`, "
-                              "and raw plan output are available in the "
-                              f"<{run_url}|GitHub Actions artifact>."
-                          )
-                      }
-                  }
-              ]
+              "blocks": blocks
           }
+
+          # -----------------------------------------------------
+          # Send to Slack
+          # -----------------------------------------------------
 
           request = urllib.request.Request(
               webhook,
@@ -452,14 +511,26 @@ jobs:
               method="POST"
           )
 
-          with urllib.request.urlopen(request) as response:
-              response_body = response.read().decode("utf-8")
+          try:
+              with urllib.request.urlopen(request) as response:
+                  response_body = response.read().decode("utf-8")
 
-              if response.status < 200 or response.status >= 300:
-                  raise RuntimeError(
-                      f"Slack webhook failed: HTTP {response.status} - "
-                      f"{response_body}"
-                  )
+                  if response.status < 200 or response.status >= 300:
+                      raise RuntimeError(
+                          f"Slack webhook failed: "
+                          f"HTTP {response.status} - {response_body}"
+                      )
 
-          print("Slack notification sent successfully.")
+                  print("Slack notification sent successfully.")
+                  print(f"Slack response: {response_body}")
+
+          except urllib.error.HTTPError as error:
+              response_body = error.read().decode("utf-8", errors="replace")
+
+              print(
+                  f"Slack webhook failed: HTTP {error.code} - "
+                  f"{response_body}"
+              )
+
+              raise
           PY
