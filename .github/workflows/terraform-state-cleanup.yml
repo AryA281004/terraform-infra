@@ -11,7 +11,7 @@ on:
           - dev
           - pre
           - prod
-        default: prod
+        
 
 permissions:
   contents: read
@@ -221,30 +221,26 @@ jobs:
             check_results_count: (.check_results // [] | length)
           }' /tmp/current-state.json
 
+      
       # ---------------------------------------------------------
-      # Select existing workspace
+      # Select Terraform workspace
       # ---------------------------------------------------------
       - name: Select Terraform workspace
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
 
-          echo "Available workspaces:"
-          terraform workspace list
+          WORKSPACE="${{ inputs.branch }}"
 
-          echo
-          echo "Selecting workspace: $WORKSPACE"
+          echo "Target Terraform workspace: $WORKSPACE"
 
-          if ! terraform workspace list | sed 's/^[* ]*//' | grep -Fxq "$WORKSPACE"; then
-            echo "ERROR: Terraform workspace '$WORKSPACE' does not exist."
-            echo "Refusing to create a new workspace during state cleanup."
-            exit 1
+          if terraform workspace list | sed 's/^[* ]*//' | grep -Fxq "$WORKSPACE"; then
+            terraform workspace select "$WORKSPACE"
+          else
+            terraform workspace new "$WORKSPACE"
           fi
 
-          terraform workspace select "$WORKSPACE"
-
-          echo
-          echo "Current workspace:"
+          echo "Current Terraform workspace:"
           terraform workspace show
 
       # ---------------------------------------------------------
