@@ -1,0 +1,367 @@
+name: Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Select the environment to DESTROY"
+        required: true
+        type: choice
+        options:
+          - dev
+          - pre
+          - prod
+          - main
+        default: dev
+      confirm:
+        description: "Type destroy-<env> to confirm (example: destroy-dev)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+# Never cancel a destroy halfway; it can leave the state locked
+# and resources half-deleted.
+concurrency:
+  group: terraform-destroy-${{ inputs.branch }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+
+jobs:
+  terraform-destroy:
+    name: Terraform Destroy - ${{ inputs.branch }}
+    runs-on: ubuntu-latest
+
+    # Add "Required reviewers" on each GitHub Environment
+    # (Settings -> Environments) to get a manual approval gate.
+    environment: ${{ inputs.branch }}
+
+    steps:
+      # ---------------------------------------------------------
+      # Safety: confirmation text must match exactly
+      # ---------------------------------------------------------
+      - name: Validate confirmation
+        shell: bash
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -e
+
+          EXPECTED="destroy-${BRANCH}"
+
+          if [ "$CONFIRM" != "$EXPECTED" ]; then
+            echo "Confirmation failed."
+            echo "Expected: $EXPECTED"
+            echo "Received: $CONFIRM"
+            exit 1
+          fi
+
+          echo "Confirmation OK for environment: $BRANCH"
+
+      # ---------------------------------------------------------
+      # Checkout selected branch
+      # ---------------------------------------------------------
+      - name: Checkout selected branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      # ---------------------------------------------------------
+      # Set Terraform variables
+      # ---------------------------------------------------------
+      - name: Set Terraform variables
+        shell: bash
+        run: |
+          set -e
+
+          echo "TF_VAR_environment=${{ inputs.branch }}" >> "$GITHUB_ENV"
+
+          if [ "${{ inputs.branch }}" = "main" ]; then
+            echo "VAR_FILES=-var-file=terraform.tfvars" >> "$GITHUB_ENV"
+          else
+            echo "VAR_FILES=-var-file=terraform.tfvars -var-file=environments/${{ inputs.branch }}.tfvars" >> "$GITHUB_ENV"
+          fi
+
+      # ---------------------------------------------------------
+      # Select AWS region based on environment
+      # ---------------------------------------------------------
+      - name: Set AWS region
+        shell: bash
+        run: |
+          set -e
+
+          case "${{ inputs.branch }}" in
+            dev)
+              echo "AWS_REGION=eu-west-1" >> "$GITHUB_ENV"
+              ;;
+            pre)
+              echo "AWS_REGION=us-east-2" >> "$GITHUB_ENV"
+              ;;
+            prod | main)
+              echo "AWS_REGION=us-east-1" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Unknown branch: ${{ inputs.branch }}"
+              exit 1
+              ;;
+          esac
+
+      # ---------------------------------------------------------
+      # Setup Terraform
+      # ---------------------------------------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      # ---------------------------------------------------------
+      # Configure AWS credentials using GitHub OIDC
+      # ---------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::666729139368:role/github-terraform
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-TerraformDestroy-${{ inputs.branch }}
+
+      - name: Verify AWS identity
+        run: |
+          echo "AWS Region: $AWS_REGION"
+          aws sts get-caller-identity
+
+      # ---------------------------------------------------------
+      # Pass MongoDB Atlas API keys to Terraform
+      # ---------------------------------------------------------
+      - name: Pass MongoDB Atlas keys to Terraform
+        shell: bash
+        env:
+          MONGODB_ATLAS_PUBLIC_KEY: ${{ secrets.MONGODB_ATLAS_PUBLIC_KEY }}
+          MONGODB_ATLAS_PRIVATE_KEY: ${{ secrets.MONGODB_ATLAS_PRIVATE_KEY }}
+        run: |
+          set -e
+          echo "TF_VAR_mongodb_atlas_public_key=$MONGODB_ATLAS_PUBLIC_KEY" >> "$GITHUB_ENV"
+          echo "TF_VAR_mongodb_atlas_private_key=$MONGODB_ATLAS_PRIVATE_KEY" >> "$GITHUB_ENV"
+
+      # ---------------------------------------------------------
+      # Terraform Init
+      # ---------------------------------------------------------
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -input=false \
+            -upgrade
+
+      # ---------------------------------------------------------
+      # Select Terraform workspace (must already exist)
+      # ---------------------------------------------------------
+      - name: Select Terraform workspace
+        shell: bash
+        run: |
+          set -e
+
+          WORKSPACE="${{ inputs.branch }}"
+          echo "Target Terraform workspace: $WORKSPACE"
+
+          if terraform workspace list | sed 's/^[* ]*//' | grep -Fxq "$WORKSPACE"; then
+            terraform workspace select "$WORKSPACE"
+          else
+            echo "Workspace '$WORKSPACE' does not exist. Nothing to destroy."
+            exit 1
+          fi
+
+          echo "Current Terraform workspace: $(terraform workspace show)"
+
+      # ---------------------------------------------------------
+      # Terraform Validate
+      # ---------------------------------------------------------
+      - name: Terraform Validate
+        run: terraform validate
+
+      # ---------------------------------------------------------
+      # Read the state: list everything Terraform is tracking
+      # ---------------------------------------------------------
+      - name: List resources in state
+        id: state-list
+        shell: bash
+        run: |
+          set -o pipefail
+
+          echo "Terraform workspace: $(terraform workspace show)"
+
+          terraform state list 2>&1 | tee state-resources.txt
+
+          COUNT=$(grep -c . state-resources.txt || true)
+          echo "Resources in state: $COUNT"
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "State is empty. Nothing to destroy."
+            exit 1
+          fi
+
+      - name: Add state summary
+        if: always()
+        run: |
+          {
+            echo "## Terraform Destroy"
+            echo ""
+            echo "**Repository:** \`${GITHUB_REPOSITORY}\`"
+            echo "**Environment:** \`${{ inputs.branch }}\`"
+            echo "**AWS Region:** \`${AWS_REGION}\`"
+            echo "**Commit:** \`$(git rev-parse HEAD)\`"
+            echo ""
+            echo "### Resources in state (will be destroyed)"
+            echo ""
+            echo '```text'
+
+            if [ -f state-resources.txt ]; then
+              head -c 60000 state-resources.txt
+            fi
+
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload state resource list
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-destroy-resources-${{ inputs.branch }}-${{ github.run_id }}
+          path: state-resources.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # ---------------------------------------------------------
+      # Terraform Destroy (driven by the state)
+      # ---------------------------------------------------------
+      - name: Terraform Destroy
+        id: terraform-destroy
+        shell: bash
+        run: |
+          set -o pipefail
+
+          terraform destroy \
+            -auto-approve \
+            $VAR_FILES \
+            -input=false \
+            -no-color \
+            2>&1 | tee destroy-output.txt
+
+      - name: Upload destroy log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-destroy-log-${{ inputs.branch }}-${{ github.run_id }}
+          path: destroy-output.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # ---------------------------------------------------------
+      # Slack notification
+      # ---------------------------------------------------------
+      - name: Send Terraform destroy result to Slack
+        if: always()
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_DESTROY_URL }}
+          STATE_OUTCOME: ${{ steps.state-list.outcome }}
+          DESTROY_OUTCOME: ${{ steps.terraform-destroy.outcome }}
+          SELECTED_BRANCH: ${{ inputs.branch }}
+          SELECTED_REGION: ${{ env.AWS_REGION }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+          state_outcome = os.environ["STATE_OUTCOME"]
+          destroy_outcome = os.environ["DESTROY_OUTCOME"]
+          branch = os.environ["SELECTED_BRANCH"]
+          region = os.environ.get("SELECTED_REGION") or "n/a"
+          run_url = os.environ["RUN_URL"]
+          repository = os.environ["REPOSITORY"]
+          commit_sha = os.environ["COMMIT_SHA"][:7]
+          actor = os.environ["ACTOR"]
+
+          if not webhook:
+              print("SLACK_WEBHOOK_PLAN_URL not set, skipping Slack notification.")
+              raise SystemExit(0)
+
+          # -----------------------------------------------------
+          # Status
+          # -----------------------------------------------------
+          if destroy_outcome == "success":
+              emoji = "🗑️"
+              title = "Terraform Destroy Succeeded"
+          elif state_outcome == "failure":
+              emoji = "❌"
+              title = "Terraform Destroy Aborted: state empty or unreadable (nothing deleted)"
+          elif destroy_outcome == "failure":
+              emoji = "🚨"
+              title = "Terraform Destroy FAILED (partially destroyed?)"
+          else:
+              emoji = "⚠️"
+              title = "Terraform Destroy Skipped / Cancelled"
+
+          # -----------------------------------------------------
+          # Slack message
+          # -----------------------------------------------------
+          blocks = [
+              {
+                  "type": "header",
+                  "text": {"type": "plain_text", "text": f"{emoji} {title}"},
+              },
+              {
+                  "type": "section",
+                  "fields": [
+                      {"type": "mrkdwn", "text": f"*Repository:*\n`{repository}`"},
+                      {"type": "mrkdwn", "text": f"*Environment:*\n`{branch}`"},
+                      {"type": "mrkdwn", "text": f"*AWS Region:*\n`{region}`"},
+                      {"type": "mrkdwn", "text": f"*Triggered by:*\n`{actor}`"},
+                      {"type": "mrkdwn", "text": f"*Commit:*\n`{commit_sha}`"},
+                  ],
+              },
+              {
+                  "type": "actions",
+                  "elements": [
+                      {
+                          "type": "button",
+                          "text": {"type": "plain_text", "text": "View Workflow"},
+                          "url": run_url,
+                      }
+                  ],
+              },
+          ]
+
+          payload = {
+              "text": f"{emoji} {title} - {repository} - {branch}",
+              "blocks": blocks,
+          }
+
+          request = urllib.request.Request(
+              webhook,
+              data=json.dumps(payload).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request) as response:
+                  print(f"Slack notification sent: HTTP {response.status}")
+          except urllib.error.HTTPError as error:
+              body = error.read().decode("utf-8", errors="replace")
+              print(f"Slack webhook failed: HTTP {error.code} - {body}")
+              raise
+          PY
