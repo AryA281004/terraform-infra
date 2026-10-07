@@ -15,7 +15,7 @@ backend_domain  = "dev.api.aryandudhat.qd.je"
 
 acm_certificate_arn = "arn:aws:acm:eu-west-1:666729139368:certificate/c541aa8e-86bc-492f-8ee9-1035125ad70d"
 
-frontend_acm_certificate_arn = "arn:aws:acm:eu-west-1:666729139368:certificate/c541aa8e-86bc-492f-8ee9-1035125ad70d"
+frontend_acm_certificate_arn = "arn:aws:acm:us-east-1:666729139368:certificate/d8ef7687-8ba6-4530-919e-fbcef8ea27a1"
 
 host_header_values = [
   "dev.api.aryandudhat.qd.je"
