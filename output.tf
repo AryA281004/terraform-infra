@@ -9,7 +9,7 @@ output "vpc_id" {
 
 output "vpc_cidr" {
   description = "NeonLens VPC CIDR block."
-  value       = module.vpc.vpc_cidr
+  value       = module.vpc.cidr_block
 }
 
 output "public_subnet_ids" {
