@@ -42,10 +42,10 @@ jobs:
     name: Approval - ${{ inputs.branch }}
     runs-on: ubuntu-latest
 
-    environment:
-      name: ${{ inputs.branch }}
+    environment: ${{ inputs.branch }}
 
     steps:
+
       - name: Approval granted
         run: |
           echo "Terraform apply approved."
@@ -61,13 +61,12 @@ jobs:
     needs: approval
     runs-on: ubuntu-latest
 
-    environment:
-      name: ${{ inputs.branch }}
+    environment: ${{ inputs.branch }}
 
     steps:
 
       # ----------------------------------------------------------
-      # CHECKOUT
+      # Checkout selected branch
       # ----------------------------------------------------------
 
       - name: Checkout selected branch
@@ -77,7 +76,7 @@ jobs:
           fetch-depth: 0
 
       # ----------------------------------------------------------
-      # SET TERRAFORM VARIABLES
+      # Set Terraform variables
       # ----------------------------------------------------------
 
       - name: Set Terraform variables
@@ -90,7 +89,7 @@ jobs:
           echo "Terraform environment: ${{ inputs.branch }}"
 
       # ----------------------------------------------------------
-      # SELECT AWS REGION
+      # Select AWS region based on environment
       # ----------------------------------------------------------
 
       - name: Set AWS region
@@ -124,7 +123,7 @@ jobs:
           echo "Selected environment: ${{ inputs.branch }}"
 
       # ----------------------------------------------------------
-      # VERIFY SELECTED CONFIGURATION
+      # Show selected configuration
       # ----------------------------------------------------------
 
       - name: Verify selected environment
@@ -136,7 +135,7 @@ jobs:
           echo "Plan Run ID: ${{ inputs.plan_run_id }}"
 
       # ----------------------------------------------------------
-      # SETUP TERRAFORM
+      # Setup Terraform
       # ----------------------------------------------------------
 
       - name: Setup Terraform
@@ -145,7 +144,49 @@ jobs:
           terraform_version: 1.9.8
 
       # ----------------------------------------------------------
-      # CONFIGURE AWS
+      # DEBUG ONLY
+      # Decode OIDC claims without exposing the JWT
+      # ----------------------------------------------------------
+
+      - name: Debug GitHub OIDC claims
+        shell: bash
+        run: |
+          set -e
+
+          TOKEN_RESPONSE=$(curl -sS \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")
+
+          TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.value')
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Failed to obtain GitHub OIDC token."
+            exit 1
+          fi
+
+          echo "GitHub OIDC claims:"
+
+          PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2)
+
+          case $((${#PAYLOAD} % 4)) in
+            2) PAYLOAD="${PAYLOAD}==" ;;
+            3) PAYLOAD="${PAYLOAD}=" ;;
+          esac
+
+          echo "$PAYLOAD" \
+            | base64 -d 2>/dev/null \
+            | jq '{
+                iss,
+                aud,
+                sub,
+                repository,
+                repository_owner,
+                ref,
+                environment
+              }'
+
+      # ----------------------------------------------------------
+      # Configure AWS credentials using GitHub OIDC
       # ----------------------------------------------------------
 
       - name: Configure AWS credentials
@@ -156,7 +197,7 @@ jobs:
           role-session-name: GitHubActions-Terraform-Apply-${{ inputs.branch }}
 
       # ----------------------------------------------------------
-      # VERIFY AWS IDENTITY
+      # Verify AWS identity
       # ----------------------------------------------------------
 
       - name: Verify AWS identity
@@ -166,7 +207,70 @@ jobs:
           aws sts get-caller-identity
 
       # ----------------------------------------------------------
-      # DOWNLOAD EXACT PLAN ARTIFACT
+      # Terraform Format Check
+      # ----------------------------------------------------------
+
+      - name: Terraform Format Check
+        run: |
+          terraform fmt -check -recursive
+
+      # ----------------------------------------------------------
+      # Terraform Init
+      # ----------------------------------------------------------
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -input=false \
+            -upgrade
+
+      # ----------------------------------------------------------
+      # Select Terraform workspace
+      # ----------------------------------------------------------
+
+      - name: Select Terraform workspace
+        shell: bash
+        run: |
+          set -e
+
+          WORKSPACE="${{ inputs.branch }}"
+
+          echo "Target Terraform workspace: $WORKSPACE"
+
+          if terraform workspace list | sed 's/^[* ]*//' | grep -Fxq "$WORKSPACE"; then
+            terraform workspace select "$WORKSPACE"
+          else
+            terraform workspace new "$WORKSPACE"
+          fi
+
+          echo "Current Terraform workspace:"
+          terraform workspace show
+
+      # ----------------------------------------------------------
+      # Terraform Validate
+      # ----------------------------------------------------------
+
+      - name: Terraform Validate
+        run: |
+          terraform validate
+
+      # ----------------------------------------------------------
+      # Passing Mongo Atlas public/private key to Terraform
+      # ----------------------------------------------------------
+
+      - name: Set MongoDB Atlas Terraform variables
+        shell: bash
+        env:
+          MONGODB_ATLAS_PUBLIC_KEY: ${{ secrets.MONGODB_ATLAS_PUBLIC_KEY }}
+          MONGODB_ATLAS_PRIVATE_KEY: ${{ secrets.MONGODB_ATLAS_PRIVATE_KEY }}
+        run: |
+          set -e
+
+          echo "TF_VAR_mongodb_atlas_public_key=$MONGODB_ATLAS_PUBLIC_KEY" >> "$GITHUB_ENV"
+          echo "TF_VAR_mongodb_atlas_private_key=$MONGODB_ATLAS_PRIVATE_KEY" >> "$GITHUB_ENV"
+
+      # ----------------------------------------------------------
+      # Download exact Terraform plan artifact
       # ----------------------------------------------------------
 
       - name: Download Terraform plan
@@ -177,43 +281,46 @@ jobs:
           run-id: ${{ inputs.plan_run_id }}
 
       # ----------------------------------------------------------
-      # VERIFY PLAN FILE
+      # Verify Terraform plan files
       # ----------------------------------------------------------
 
       - name: Verify Terraform plan
+        shell: bash
         run: |
+          set -e
+
+          echo "Downloaded Terraform plan artifact:"
+          ls -lah
+
           if [ ! -f plan.out ]; then
             echo "ERROR: plan.out was not found."
+            echo "The selected Plan workflow did not produce a valid plan artifact."
             exit 1
           fi
 
-          echo "Terraform plan found."
-
+          echo ""
+          echo "Terraform plan found:"
           ls -lh plan.out
 
-      # ----------------------------------------------------------
-      # TERRAFORM INIT
-      # ----------------------------------------------------------
+          if [ -f plan.txt ]; then
+            echo "Readable plan found:"
+            ls -lh plan.txt
+          fi
 
-      - name: Terraform Init
-        run: |
-          terraform init \
-            -input=false
-
-      # ----------------------------------------------------------
-      # TERRAFORM VALIDATE
-      # ----------------------------------------------------------
-
-      - name: Terraform Validate
-        run: |
-          terraform validate
+          if [ -f plan-output.txt ]; then
+            echo "Terraform plan output found:"
+            ls -lh plan-output.txt
+          fi
 
       # ----------------------------------------------------------
-      # SHOW PLAN BEFORE APPLY
+      # Show Terraform plan before apply
       # ----------------------------------------------------------
 
       - name: Show Terraform plan
+        shell: bash
         run: |
+          set -e
+
           terraform show \
             -no-color \
             plan.out > plan.txt
@@ -221,23 +328,12 @@ jobs:
           cat plan.txt
 
       # ----------------------------------------------------------
-      # APPLY EXACT APPROVED PLAN
-      # ----------------------------------------------------------
-
-      - name: Terraform Apply
-        id: terraform-apply
-        run: |
-          terraform apply \
-            -input=false \
-            -auto-approve \
-            plan.out
-
-      # ----------------------------------------------------------
-      # GITHUB SUMMARY
+      # GitHub Actions Summary
       # ----------------------------------------------------------
 
       - name: Add Terraform apply summary
         if: always()
+        shell: bash
         run: |
           {
             echo "## Terraform Apply"
@@ -246,8 +342,22 @@ jobs:
             echo "**Branch:** \`${{ inputs.branch }}\`"
             echo "**Environment:** \`${TF_VAR_environment}\`"
             echo "**AWS Region:** \`${AWS_REGION}\`"
-            echo "**Commit:** \`${GITHUB_SHA}\`"
+            echo "**Commit:** \`$(git rev-parse HEAD)\`"
             echo "**Plan Run ID:** \`${{ inputs.plan_run_id }}\`"
+            echo "**Terraform Workspace:** \`$(terraform workspace show 2>/dev/null || echo unknown)\`"
+            echo ""
+            echo "### Terraform Plan"
+            echo ""
+            echo '```text'
+
+            if [ -f plan.txt ]; then
+              head -c 60000 plan.txt
+            else
+              echo "Terraform plan output was not available."
+            fi
+
+            echo ""
+            echo '```'
             echo ""
             echo "### Apply Status"
             echo ""
@@ -260,15 +370,41 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ----------------------------------------------------------
-      # SLACK NOTIFICATION
+      # Apply exact approved Terraform plan
+      # ----------------------------------------------------------
+
+      - name: Terraform Apply
+        id: terraform-apply
+        shell: bash
+        run: |
+          set -e
+
+          echo "Terraform workspace: $(terraform workspace show)"
+          echo "Branch: ${{ inputs.branch }}"
+          echo "AWS Region: $AWS_REGION"
+          echo "Plan Run ID: ${{ inputs.plan_run_id }}"
+
+          echo ""
+          echo "Applying exact approved Terraform plan..."
+          echo ""
+
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            plan.out
+
+      # ----------------------------------------------------------
+      # Slack notification
       # ----------------------------------------------------------
 
       - name: Send Terraform apply result to Slack
         if: always()
+        shell: bash
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_APPLY_URL }}
           APPLY_OUTCOME: ${{ steps.terraform-apply.outcome }}
           SELECTED_BRANCH: ${{ inputs.branch }}
+          SELECTED_ENVIRONMENT: ${{ inputs.branch }}
           SELECTED_REGION: ${{ env.AWS_REGION }}
           PLAN_RUN_ID: ${{ inputs.plan_run_id }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -279,17 +415,23 @@ jobs:
           python3 <<'PY'
           import json
           import os
+          import urllib.error
           import urllib.request
 
           webhook = os.environ["SLACK_WEBHOOK_URL"]
           outcome = os.environ["APPLY_OUTCOME"]
           branch = os.environ["SELECTED_BRANCH"]
+          environment = os.environ["SELECTED_ENVIRONMENT"]
           region = os.environ["SELECTED_REGION"]
           plan_run_id = os.environ["PLAN_RUN_ID"]
           run_url = os.environ["RUN_URL"]
           plan_run_url = os.environ["PLAN_RUN_URL"]
           repository = os.environ["REPOSITORY"]
           commit_sha = os.environ["COMMIT_SHA"][:7]
+
+          # -----------------------------------------------------
+          # Status
+          # -----------------------------------------------------
 
           if outcome == "success":
               emoji = "🚀"
@@ -300,61 +442,99 @@ jobs:
               title = "Terraform Apply Failed"
               status = "Terraform apply failed. Check the workflow logs."
 
+          # -----------------------------------------------------
+          # Slack blocks
+          # -----------------------------------------------------
+
+          blocks = [
+              {
+                  "type": "header",
+                  "text": {
+                      "type": "plain_text",
+                      "text": f"{emoji} {title}"
+                  }
+              },
+
+              {
+                  "type": "section",
+                  "fields": [
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Repository:*\n`{repository}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Branch:*\n`{branch}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Environment:*\n`{environment}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*AWS Region:*\n`{region}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Commit:*\n`{commit_sha}`"
+                      },
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Plan Run:*\n<{plan_run_url}|#{plan_run_id}>"
+                      }
+                  ]
+              },
+
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": status
+                  }
+              },
+
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": (
+                          "*Terraform Plan:*\n"
+                          f"The exact plan from Run #{plan_run_id} was used for this apply."
+                      )
+                  }
+              },
+
+              {
+                  "type": "actions",
+                  "elements": [
+                      {
+                          "type": "button",
+                          "text": {
+                              "type": "plain_text",
+                              "text": "View Apply Workflow"
+                          },
+                          "url": run_url
+                      },
+                      {
+                          "type": "button",
+                          "text": {
+                              "type": "plain_text",
+                              "text": "View Plan Workflow"
+                          },
+                          "url": plan_run_url
+                      }
+                  ]
+              }
+          ]
+
           payload = {
               "text": f"{emoji} {title} - {repository} - {branch}",
-
-              "blocks": [
-                  {
-                      "type": "header",
-                      "text": {
-                          "type": "plain_text",
-                          "text": f"{emoji} {title}"
-                      }
-                  },
-
-                  {
-                      "type": "section",
-                      "fields": [
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*Repository:*\n`{repository}`"
-                          },
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*Branch:*\n`{branch}`"
-                          },
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*AWS Region:*\n`{region}`"
-                          },
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*Commit:*\n`{commit_sha}`"
-                          },
-                          {
-                              "type": "mrkdwn",
-                              "text": f"*Plan Run:*\n<{plan_run_url}|#{plan_run_id}>"
-                          }
-                      ]
-                  },
-
-                  {
-                      "type": "section",
-                      "text": {
-                          "type": "mrkdwn",
-                          "text": status
-                      }
-                  },
-
-                  {
-                      "type": "section",
-                      "text": {
-                          "type": "mrkdwn",
-                          "text": f"🔗 <{run_url}|View Terraform Apply workflow>"
-                      }
-                  }
-              ]
+              "blocks": blocks
           }
+
+          # -----------------------------------------------------
+          # Send to Slack
+          # -----------------------------------------------------
 
           request = urllib.request.Request(
               webhook,
@@ -365,14 +545,30 @@ jobs:
               method="POST"
           )
 
-          with urllib.request.urlopen(request) as response:
-              response_body = response.read().decode("utf-8")
+          try:
+              with urllib.request.urlopen(request) as response:
+                  response_body = response.read().decode("utf-8")
 
-              if response.status < 200 or response.status >= 300:
-                  raise RuntimeError(
-                      f"Slack webhook failed: HTTP {response.status} - "
-                      f"{response_body}"
-                  )
+                  if response.status < 200 or response.status >= 300:
+                      raise RuntimeError(
+                          f"Slack webhook failed: HTTP {response.status} - "
+                          f"{response_body}"
+                      )
 
-          print("Slack notification sent successfully.")
+                  print("Slack notification sent successfully.")
+                  print(f"Slack response: {response_body}")
+
+          except urllib.error.HTTPError as error:
+              response_body = error.read().decode(
+                  "utf-8",
+                  errors="replace"
+              )
+
+              print(
+                  f"Slack webhook failed: "
+                  f"HTTP {error.code} - {response_body}"
+              )
+
+              raise
           PY
+
