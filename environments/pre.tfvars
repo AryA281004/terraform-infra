@@ -5,7 +5,6 @@ container_environment = {
 
 vpc_cidr = "20.0.0.0/16"
 
-vpc_cidr = "20.0.0.0/16"
 
 public_subnet_cidr = {
   public_subnet_1a = {
