@@ -210,3 +210,43 @@ output "ecs_storage_alarm_name" {
   description = "Name of the ECS ephemeral storage utilization alarm."
   value       = module.cloudwatch_metrics.ecs_storage_alarm_name
 }
+
+
+# ============================================================
+# PROMETHEUS / GRAFANA
+# ============================================================
+
+output "prometheus_name" {
+  description = "Prometheus resource name."
+  value       = module.monitoring.prometheus_name
+}
+
+output "prometheus_port" {
+  description = "Prometheus HTTP port."
+  value       = module.monitoring.prometheus_port
+}
+
+output "prometheus_security_group_id" {
+  description = "Prometheus security group ID."
+  value       = module.monitoring.prometheus_security_group_id
+}
+
+output "grafana_name" {
+  description = "Grafana resource name."
+  value       = module.monitoring.grafana_name
+}
+
+output "grafana_port" {
+  description = "Grafana HTTP port."
+  value       = module.monitoring.grafana_port
+}
+
+output "grafana_service_name" {
+  description = "Grafana ECS service name."
+  value       = module.monitoring.grafana_service_name
+}
+
+output "grafana_security_group_id" {
+  description = "Grafana security group ID."
+  value       = module.monitoring.grafana_security_group_id
+}

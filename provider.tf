@@ -1,7 +1,8 @@
 provider "aws" {
   region = lookup(
     local.aws_region,
-    terraform.workspace
+    terraform.workspace,
+    "eu-north-1"
   )
 
   default_tags {
