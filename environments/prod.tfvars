@@ -5,6 +5,45 @@ container_environment = {
 
 vpc_cidr = "30.0.0.0/16"
 
+vpc_cidr = "30.0.0.0/16"
+
+public_subnet_cidr = {
+  public_subnet_1a = {
+    cidr_block = "30.0.1.0/24"
+    az         = "us-east-1a"
+  }
+
+  public_subnet_1b = {
+    cidr_block = "30.0.2.0/24"
+    az         = "us-east-1b"
+  }
+
+  public_subnet_1c = {
+    cidr_block = "30.0.3.0/24"
+    az         = "us-east-1c"
+  }
+}
+
+private_subnet_cidr = {
+  private_subnet_1a = {
+    cidr_block      = "30.0.11.0/24"
+    az              = "us-east-1a"
+    nat_gateway_key = "public_subnet_1a"
+  }
+
+  private_subnet_1b = {
+    cidr_block      = "30.0.12.0/24"
+    az              = "us-east-1b"
+    nat_gateway_key = "public_subnet_1b"
+  }
+
+  private_subnet_1c = {
+    cidr_block      = "30.0.13.0/24"
+    az              = "us-east-1c"
+    nat_gateway_key = "public_subnet_1c"
+  }
+}
+
 aws_region = "us-east-1"
 
 aws_account_id = "666729139368"

@@ -25,6 +25,23 @@ variable "vpc_cidr" {
   type        = string
 }
 
+variable "public_subnet_cidr" {
+  description = "Public subnet configuration."
+  type = map(object({
+    cidr_block = string
+    az         = string
+  }))
+}
+
+variable "private_subnet_cidr" {
+  description = "Private subnet configuration."
+  type = map(object({
+    cidr_block      = string
+    az              = string
+    nat_gateway_key = string
+  }))
+}                        
+
 
 
 # ============================================================

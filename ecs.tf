@@ -3,7 +3,7 @@
 # ============================================================
 
 module "ecs" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.3.6"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.4.1"
 
   environment = var.environment
   name        = var.project_name
@@ -23,7 +23,8 @@ module "ecs" {
 
   service_subnet_ids = [
     module.vpc.private_subnet_ids["private_subnet_1a"],
-    module.vpc.private_subnet_ids["private_subnet_1b"]
+    module.vpc.private_subnet_ids["private_subnet_1b"],
+    module.vpc.private_subnet_ids["private_subnet_1c"],
   ]
 
   service_security_group_id = module.vpc.security_group_ids["container-sg"]
@@ -102,6 +103,18 @@ module "ecs" {
 
   enable_deployment_circuit_breaker = false
   enable_deployment_rollback        = false
+
+  # ----------------------------------------------------------
+  # SERVICE DISCOVERY
+  # ----------------------------------------------------------
+
+  enable_service_discovery = true
+
+  service_discovery_namespace_name = "neonlens.internal"
+
+  service_discovery_service_name = "backend"
+
+  service_discovery_dns_ttl = 10
 
   # ----------------------------------------------------------
   # ECS EXEC

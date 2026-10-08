@@ -3,15 +3,15 @@
 # ============================================================
 
 module "vpc" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//vpc?ref=v1.3.6"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//vpc?ref=v1.4.1"
 
   environment = var.environment
   vpc_name    = var.project_name
 
   vpc_cidr = var.vpc_cidr
 
-  public_subnet_cidr  = local.public_subnet_cidr
-  private_subnet_cidr = local.private_subnet_cidr
+  public_subnet_cidr  = var.public_subnet_cidr
+  private_subnet_cidr = var.private_subnet_cidr
 
   security_all_group = {
     alb-sg = {
