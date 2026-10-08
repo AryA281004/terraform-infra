@@ -40,7 +40,7 @@ variable "private_subnet_cidr" {
     az              = string
     nat_gateway_key = string
   }))
-}                        
+}
 
 
 
