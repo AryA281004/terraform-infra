@@ -277,3 +277,7 @@ variable "environment" {
   }
 }
 
+variable "private_route_table_ids" {
+  description = "Route table IDs associated with the private subnets."
+  type        = list(string)
+}
