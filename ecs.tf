@@ -13,6 +13,8 @@ module "ecs" {
     "eu-north-1"
   )
 
+  depends_on = [module.vpc, module.alb]
+
   tags = local.common_tags
 
   # ----------------------------------------------------------

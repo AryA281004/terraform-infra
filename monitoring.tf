@@ -5,6 +5,8 @@
 module "monitoring" {
   source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=v1.4.5"
 
+  depends_on = [module.ecs]
+
   # ==========================================================
   # GENERAL
   # ==========================================================
