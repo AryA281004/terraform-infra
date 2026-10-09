@@ -3,7 +3,7 @@
 # ============================================================
 
 module "mongodb_peering" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//mongo_peering?ref=v1.4.2"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//mongo_peering?ref=v1.4.3"
 
   depends_on = [module.vpc]
   # ----------------------------------------------------------
