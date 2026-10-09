@@ -3,7 +3,7 @@
 # ============================================================
 
 module "monitoring" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=v1.4.3"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=v1.4.4"
 
   # ==========================================================
   # GENERAL
