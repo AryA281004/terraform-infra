@@ -276,8 +276,3 @@ variable "environment" {
     error_message = "environment must contain only lowercase letters, numbers, and hyphens."
   }
 }
-
-variable "private_route_table_ids" {
-  description = "Route table IDs associated with the private subnets."
-  type        = list(string)
-}
