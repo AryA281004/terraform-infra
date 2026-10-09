@@ -3,7 +3,7 @@
 # ============================================================
 
 module "s3" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//s3?ref=v1.4.5"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//s3?ref=v1.4.6"
 
   environment = var.environment
   name        = var.project_name
