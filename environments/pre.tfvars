@@ -3,45 +3,45 @@ container_environment = {
   PORT     = 3000
 }
 
-vpc_cidr = "20.0.0.0/16"
-
+vpc_cidr = "10.20.0.0/16"
 
 public_subnet_cidr = {
   public_subnet_1a = {
-    cidr_block = "20.0.1.0/24"
+    cidr_block = "10.20.1.0/24"
     az         = "us-east-2a"
   }
 
   public_subnet_1b = {
-    cidr_block = "20.0.2.0/24"
+    cidr_block = "10.20.2.0/24"
     az         = "us-east-2b"
   }
 
   public_subnet_1c = {
-    cidr_block = "20.0.3.0/24"
+    cidr_block = "10.20.3.0/24"
     az         = "us-east-2c"
   }
 }
 
 private_subnet_cidr = {
   private_subnet_1a = {
-    cidr_block      = "20.0.11.0/24"
+    cidr_block      = "10.20.11.0/24"
     az              = "us-east-2a"
     nat_gateway_key = "public_subnet_1a"
   }
 
   private_subnet_1b = {
-    cidr_block      = "20.0.12.0/24"
+    cidr_block      = "10.20.12.0/24"
     az              = "us-east-2b"
     nat_gateway_key = "public_subnet_1b"
   }
 
   private_subnet_1c = {
-    cidr_block      = "20.0.13.0/24"
+    cidr_block      = "10.20.13.0/24"
     az              = "us-east-2c"
     nat_gateway_key = "public_subnet_1c"
   }
 }
+
 
 aws_region = "us-east-2"
 
