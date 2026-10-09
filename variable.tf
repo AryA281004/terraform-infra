@@ -273,6 +273,6 @@ variable "environment" {
 
   validation {
     condition     = can(regex("^[a-z0-9-]+$", var.environment))
-    error_message = "environment must contain only lowercase letters, numbers, and hyphens."
+    error_message = "environment must contain only lowercase letters, numbers, and hyphens..."
   }
 }
