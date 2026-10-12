@@ -47,4 +47,8 @@ module "alb" {
   host_header_values   = var.host_header_values
 
   tags = local.common_tags
+
+  grafana_port               = var.grafana_port
+  grafana_health_check_path  = var.grafana_health_check_path
+  grafana_host_header_values = [var.grafana_domain]
 }

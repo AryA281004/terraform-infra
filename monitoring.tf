@@ -92,4 +92,6 @@ module "monitoring" {
   # ==========================================================
 
   log_retention_days = 30
+
+  grafana_target_group_arn = module.alb.grafana_target_group_arn
 }
