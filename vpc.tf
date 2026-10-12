@@ -31,13 +31,6 @@ module "vpc" {
           to_port     = 443
           protocol    = "tcp"
           cidr_blocks = ["0.0.0.0/0"]
-        },
-        {
-          description     = "Allow Prometheus to reach ALB."
-          from_port       = var.prometheus_port
-          to_port         = var.prometheus_port
-          protocol        = "tcp"
-          security_groups = [module.monitoring.prometheus_security_group_id]
         }
       ]
 
