@@ -3,7 +3,7 @@
 # ============================================================
 
 module "vpc" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//vpc?ref=v1.4.6"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//vpc?ref=v1.4.7"
 
   environment = var.environment
   vpc_name    = var.project_name
@@ -31,6 +31,13 @@ module "vpc" {
           to_port     = 443
           protocol    = "tcp"
           cidr_blocks = ["0.0.0.0/0"]
+        },
+        {
+          description     = "Allow Prometheus to reach ALB."
+          from_port       = var.prometheus_port
+          to_port         = var.prometheus_port
+          protocol        = "tcp"
+          security_groups = [aws_security_group.prometheus.id]
         }
       ]
 
