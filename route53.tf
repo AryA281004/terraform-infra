@@ -29,7 +29,7 @@ data "aws_route53_zone" "neonlens" {
 # ============================================================
 
 module "route53" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//route53?ref=v1.4.7"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//route53?ref=v1.4.8"
 
   environment = var.environment
   name        = var.project_name
@@ -70,6 +70,17 @@ module "route53" {
 
       backend = {
         name = var.backend_domain
+        type = "A"
+
+        alias = {
+          dns_name               = module.alb.alb_dns_name
+          zone_id                = module.alb.alb_zone_id
+          evaluate_target_health = true
+        }
+      }
+
+      grafana = {
+        name = var.grafana_domain
         type = "A"
 
         alias = {

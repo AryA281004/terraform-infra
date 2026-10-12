@@ -53,6 +53,7 @@ container_image = "666729139368.dkr.ecr.us-east-2.amazonaws.com/neon-lens-backen
 
 frontend_domain = "pre-neonlens.aryandudhat.qd.je"
 backend_domain  = "pre-api.aryandudhat.qd.je"
+grafana_domain  = "grafana-pre.aryandudhat.qd.je"
 
 acm_certificate_arn = "arn:aws:acm:us-east-2:666729139368:certificate/e47202a8-4ae1-41fd-83f0-444d7f1d27a2"
 
@@ -103,3 +104,7 @@ container_secrets = {
 }
 
 execution_secret_arns = ["arn:aws:secretsmanager:us-east-2:666729139368:secret:pre/neonlens/backend-nEJgNj*"]
+
+grafana_host_header_values = [
+  "grafana-pre.aryandudhat.qd.je"
+]

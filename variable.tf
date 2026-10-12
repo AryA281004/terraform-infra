@@ -146,6 +146,16 @@ variable "backend_domain" {
   }
 }
 
+variable "grafana_domain" {
+  description = "Grafana custom domain pointing to the Application Load Balancer."
+  type        = string
+
+  validation {
+    condition     = length(trimspace(var.grafana_domain)) > 0
+    error_message = "grafana_domain must not be empty."
+  }
+}
+
 
 # ============================================================
 # ALB HTTPS
@@ -275,4 +285,16 @@ variable "environment" {
     condition     = can(regex("^[a-z0-9-]+$", var.environment))
     error_message = "environment must contain only lowercase letters, numbers, and hyphens..."
   }
+}
+
+variable "grafana_port" {
+  description = "Grafana port"
+  type        = number
+  default     = 3030
+}
+
+variable "grafana_health_check_path" {
+  description = "Grafana health check path"
+  type        = string
+  default     = "/"
 }
