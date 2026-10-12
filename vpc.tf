@@ -37,7 +37,7 @@ module "vpc" {
           from_port       = var.prometheus_port
           to_port         = var.prometheus_port
           protocol        = "tcp"
-          security_groups = [aws_security_group.prometheus.id]
+          security_groups = [module.monitoring.prometheus_security_group_id]
         }
       ]
 
