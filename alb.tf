@@ -51,4 +51,8 @@ module "alb" {
   grafana_port               = var.grafana_port
   grafana_health_check_path  = var.grafana_health_check_path
   grafana_host_header_values = [var.grafana_domain]
+
+  prometheus_port               = var.prometheus_port
+  prometheus_health_check_path  = var.prometheus_health_check_path
+  prometheus_host_header_values = [var.prometheus_domain]
 }
