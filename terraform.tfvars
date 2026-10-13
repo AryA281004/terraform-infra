@@ -19,7 +19,7 @@ grafana_health_check_path = "/"
 
 
 prometheus_port              = 9090
-prometheus_health_check_path = "/"
+prometheus_health_check_path = "/-/healthy"
 
 
 # ============================================================
