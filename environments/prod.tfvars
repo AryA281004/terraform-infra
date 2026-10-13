@@ -49,9 +49,10 @@ aws_account_id = "666729139368"
 container_image = "666729139368.dkr.ecr.us-east-1.amazonaws.com/neon-lens-backend:latest"
 
 
-frontend_domain = "neonlens.aryandudhat.qd.je"
-backend_domain  = "api.aryandudhat.qd.je"
-grafana_domain  = "grafana-prod.aryandudhat.qd.je"
+frontend_domain   = "neonlens.aryandudhat.qd.je"
+backend_domain    = "api.aryandudhat.qd.je"
+grafana_domain    = "grafana-prod.aryandudhat.qd.je"
+prometheus_domain = "prometheus-prod.aryandudhat.qd.je"
 
 # ============================================================
 # BACKEND SECRETS
@@ -108,4 +109,8 @@ frontend_acm_certificate_arn = "arn:aws:acm:us-east-1:666729139368:certificate/d
 
 grafana_host_header_values = [
   "grafana-prod.aryandudhat.qd.je"
+]
+
+prometheus_host_header_values = [
+  "prometheus-prod.aryandudhat.qd.je"
 ]

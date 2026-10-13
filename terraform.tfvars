@@ -7,7 +7,7 @@ project_name = "neonlens"
 
 
 # ============================================================
-# GRAFANA
+# GRAFANA & PROMETHEUS
 # ============================================================
 
 
@@ -16,6 +16,10 @@ grafana_port = 3030
 
 
 grafana_health_check_path = "/"
+
+
+prometheus_port              = 9090
+prometheus_health_check_path = "/"
 
 
 # ============================================================

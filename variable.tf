@@ -298,3 +298,32 @@ variable "grafana_health_check_path" {
   type        = string
   default     = "/"
 }
+
+
+variable "prometheus_domain" {
+  description = "Prometheus custom domain pointing to the Application Load Balancer."
+  type        = string
+
+  validation {
+    condition     = length(trimspace(var.prometheus_domain)) > 0
+    error_message = "prometheus_domain must not be empty."
+  }
+}
+
+variable "prometheus_port" {
+  description = "Prometheus port"
+  type        = number
+  default     = 9090
+}
+
+variable "prometheus_health_check_path" {
+  description = "Prometheus health check path"
+  type        = string
+  default     = "/"
+}
+
+variable "prometheus_host_header_values" {
+  description = "Hostnames routed to the Prometheus target group."
+  type        = list(string)
+  default     = []
+}
