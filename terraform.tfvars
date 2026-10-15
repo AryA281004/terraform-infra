@@ -37,7 +37,7 @@ task_memory = 4096
 container_cpu    = 1920
 container_memory = 3840
 
-blackbox_exporter_cpu = 128
+blackbox_exporter_cpu    = 128
 blackbox_exporter_memory = 256
 
 desired_count = 2
