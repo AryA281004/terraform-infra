@@ -31,20 +31,23 @@ prometheus_health_check_path = "/-/healthy"
 
 container_port = 3000
 
-container_cpu    = 512
-container_memory = 1024
+task_cpu    = 2048
+task_memory = 4096
 
-task_cpu    = 512
-task_memory = 1024
+container_cpu    = 1920
+container_memory = 3840
+
+blackbox_exporter_cpu = 128
+blackbox_exporter_memory = 256
 
 desired_count = 2
 
 autoscaling_min_capacity = 2
 autoscaling_max_capacity = 6
 
+enable_blackbox_exporter = true
 
-
-
+blackbox_exporter_image = "prom/blackbox-exporter:v0.27.0"
 
 
 domain_name = "aryandudhat.qd.je"

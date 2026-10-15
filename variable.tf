@@ -327,3 +327,32 @@ variable "prometheus_host_header_values" {
   type        = list(string)
   default     = []
 }
+
+
+# ============================================================
+# BLACKBOX EXPORTER SIDECAR
+# ============================================================
+
+variable "enable_blackbox_exporter" {
+  description = "Enable the optional Blackbox Exporter sidecar."
+  type        = bool
+  
+}
+
+variable "blackbox_exporter_image" {
+  description = "Blackbox Exporter container image."
+  type        = string
+  
+}
+
+variable "blackbox_exporter_cpu" {
+  description = "CPU units reserved for the Blackbox Exporter container."
+  type        = number
+  
+}
+
+variable "blackbox_exporter_memory" {
+  description = "Memory in MiB reserved for the Blackbox Exporter container."
+  type        = number
+  
+}

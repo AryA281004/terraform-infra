@@ -3,7 +3,7 @@
 # ============================================================
 
 module "ecs" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.4.10"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//ecs?ref=v1.4.16"
 
   environment = var.environment
   name        = var.project_name
@@ -153,4 +153,16 @@ module "ecs" {
   scale_out_cooldown = 60
 
   task_role_policy_arns = []
+
+  
+  # ----------------------------------------------------------
+  # BLACKBOX EXPORTER
+  # ----------------------------------------------------------
+
+  enable_blackbox_exporter = var.enable_blackbox_exporter
+
+  blackbox_exporter_image  = var.blackbox_exporter_image
+  blackbox_exporter_cpu    = var.blackbox_exporter_cpu
+  blackbox_exporter_memory = var.blackbox_exporter_memory
+
 }

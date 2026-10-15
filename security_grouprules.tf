@@ -21,3 +21,16 @@ resource "aws_vpc_security_group_ingress_rule" "backend_from_prometheus" {
 
   description = "Allow Prometheus to scrape the backend."
 }
+
+
+resource "aws_vpc_security_group_ingress_rule" "backend_blackbox_from_prometheus" {
+  security_group_id = module.vpc.security_group_ids["container-sg"]
+
+  referenced_security_group_id = module.monitoring.prometheus_security_group_id
+
+  from_port   = 9115
+  to_port     = 9115
+  ip_protocol = "tcp"
+
+  description = "Allow Prometheus to scrape the backend Blackbox Exporter."
+}

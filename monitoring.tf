@@ -3,7 +3,7 @@
 # ============================================================
 
 module "monitoring" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=v1.4.10"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=v1.4.16"
 
   depends_on = [module.ecs]
 
@@ -75,8 +75,8 @@ module "monitoring" {
 
   grafana_port = 3030
 
-  grafana_cpu    = 512
-  grafana_memory = 1024
+  grafana_cpu    = 1024
+  grafana_memory = 2048
 
   grafana_desired_count = 1
 
