@@ -299,6 +299,12 @@ variable "grafana_health_check_path" {
   default     = "/"
 }
 
+variable "grafana_host_header_values" {
+  description = "Hostnames routed to the Grafana target group."
+  type        = list(string)
+  default     = []
+}
+
 
 variable "prometheus_domain" {
   description = "Prometheus custom domain pointing to the Application Load Balancer."

@@ -3,7 +3,7 @@
 # ============================================================
 
 module "monitoring" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=v1.4.17"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=v1.4.19"
 
   depends_on = [module.ecs]
 
@@ -98,5 +98,7 @@ module "monitoring" {
   prometheus_target_group_arn = module.alb.prometheus_target_group_arn
 
   alb_security_group_id = module.vpc.security_group_ids["alb-sg"]
+
+  prometheus_domain = var.prometheus_domain
 
 }
