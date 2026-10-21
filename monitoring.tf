@@ -101,4 +101,6 @@ module "monitoring" {
 
   prometheus_domain = var.prometheus_domain
 
+  backend_domain = var.backend_domain
+
 }
