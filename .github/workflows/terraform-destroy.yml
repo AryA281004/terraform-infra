@@ -707,7 +707,7 @@ jobs:
                   "success": "✅ Success",
                   "failure": "❌ Failed",
                   "cancelled": "⚪ Cancelled",
-                  "skipped": "⏭️ Skipped",
+                  "skipped": "⏭️ Already clean",
                   "unknown": "⚪ Not reached",
               }
               return labels.get(value, f"⚪ {value.title()}")
