@@ -618,8 +618,8 @@ jobs:
           retention-days: 7
 
 
-      # ---------------------------------------------------------
-      # Beautiful Slack notification — destroy + S3 cleanup
+           # ---------------------------------------------------------
+      # Slack notification: destroy + S3 cleanup
       # ---------------------------------------------------------
       - name: "📣 Send Infrastructure Report to Slack"
         if: always()
@@ -627,6 +627,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_DESTROY_URL }}
           STATE_OUTCOME: ${{ steps.state-list.outcome }}
+          STATE_RESOURCE_COUNT: ${{ steps.state-list.outputs.resource_count }}
           S3_CLEANUP_OUTCOME: ${{ steps.empty-s3-buckets.outcome }}
           DESTROY_OUTCOME: ${{ steps.terraform-destroy.outcome }}
           S3_BUCKET_COUNT: ${{ steps.empty-s3-buckets.outputs.bucket_count }}
@@ -641,10 +642,13 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
           ACTOR: ${{ github.actor }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           python3 <<'PYTHON'
           import json
           import os
+          import time
           import urllib.error
           import urllib.request
 
@@ -659,7 +663,10 @@ jobs:
           repository = os.environ["REPOSITORY"]
           commit_sha = os.environ["COMMIT_SHA"][:7]
           actor = os.environ["ACTOR"]
+          run_number = os.environ.get("RUN_NUMBER", "?")
+          run_attempt = os.environ.get("RUN_ATTEMPT", "1")
 
+          state_resource_count = os.environ.get("STATE_RESOURCE_COUNT", "").strip()
           bucket_count = os.environ.get("S3_BUCKET_COUNT") or "0"
           already_clean = os.environ.get("S3_ALREADY_CLEAN") or "0"
           cleaned = os.environ.get("S3_CLEANED") or "0"
@@ -669,6 +676,20 @@ jobs:
           if not webhook:
               print("SLACK_WEBHOOK_DESTROY_URL is not configured; Slack notification skipped.")
               raise SystemExit(0)
+
+          def fmt_duration(seconds):
+              h, rem = divmod(int(seconds), 3600)
+              m, s = divmod(rem, 60)
+              if h:
+                  return f"{h}h {m}m {s}s"
+              if m:
+                  return f"{m}m {s}s"
+              return f"{s}s"
+
+          started = os.environ.get("DESTROY_STARTED_AT", "")
+          duration = fmt_duration(time.time() - int(started)) if started.isdigit() else ""
+
+          nothing_to_destroy = state_resource_count == "0" and state_outcome == "success"
 
           # Choose the overall outcome with failure causes taking precedence.
           if cleanup_outcome == "failure":
@@ -686,14 +707,6 @@ jobs:
                   ":warning: Terraform state could not be validated or was empty. "
                   "No successful destroy should be assumed; inspect the workflow run."
               )
-          elif destroy_outcome == "success":
-              emoji, color = "✅", "#2EB886"
-              title = "INFRASTRUCTURE DESTROY COMPLETED"
-              summary = (
-                  ":white_check_mark: *Terraform destroy completed successfully.* "
-                  "The selected environment's planned S3 buckets were checked before "
-                  "destruction."
-              )
           elif destroy_outcome == "failure":
               emoji, color = "🚨", "#E01E5A"
               title = "TERRAFORM DESTROY FAILED"
@@ -701,6 +714,21 @@ jobs:
                   ":rotating_light: Terraform destroy failed. Depending on the error, "
                   "some resources may already have been removed. Check the run and "
                   "destroy log before taking further action."
+              )
+          elif nothing_to_destroy:
+              emoji, color = "ℹ️", "#ECB22E"
+              title = "NOTHING TO DESTROY"
+              summary = (
+                  f":information_source: The *{branch}* state has no tracked resources, "
+                  "so there was nothing to tear down."
+              )
+          elif destroy_outcome == "success":
+              emoji, color = "✅", "#2EB886"
+              title = "INFRASTRUCTURE DESTROY COMPLETED"
+              summary = (
+                  ":white_check_mark: *Terraform destroy completed successfully.* "
+                  "The selected environment's planned S3 buckets were checked before "
+                  "destruction."
               )
           else:
               emoji, color = "⚠️", "#ECB22E"
@@ -734,7 +762,29 @@ jobs:
           elif cleanup_outcome == "failure":
               cleanup_detail = "🔴 Cleanup failed — see workflow logs"
           else:
-              cleanup_detail = f"{status(cleanup_outcome)}"
+              cleanup_detail = status(cleanup_outcome)
+
+          if nothing_to_destroy:
+              destroy_detail = "ℹ️ Not required — zero tracked resources"
+          else:
+              destroy_detail = status(destroy_outcome)
+
+          context_fields = [
+              {"type": "mrkdwn", "text": f"*Environment*\n`{branch}`"},
+              {"type": "mrkdwn", "text": f"*AWS Region*\n`{region}`"},
+              {"type": "mrkdwn", "text": f"*Repository*\n`{repository}`"},
+              {"type": "mrkdwn", "text": f"*Triggered by*\n`{actor}`"},
+              {"type": "mrkdwn", "text": f"*Commit*\n<{commit_url}|`{commit_sha}`>"},
+              {"type": "mrkdwn", "text": f"*State listing*\n{status(state_outcome)}"},
+          ]
+          if state_resource_count:
+              context_fields.append(
+                  {"type": "mrkdwn", "text": f"*Tracked resources*\n`{state_resource_count}`"}
+              )
+          if duration:
+              context_fields.append(
+                  {"type": "mrkdwn", "text": f"*Duration*\n`{duration}`"}
+              )
 
           blocks = [
               {
@@ -756,17 +806,7 @@ jobs:
                       "type": "mrkdwn",
                       "text": ":gear: *DEPLOYMENT CONTEXT*",
                   },
-                  "fields": [
-                      {"type": "mrkdwn", "text": f"*Environment*\n`{branch}`"},
-                      {"type": "mrkdwn", "text": f"*AWS Region*\n`{region}`"},
-                      {"type": "mrkdwn", "text": f"*Repository*\n`{repository}`"},
-                      {"type": "mrkdwn", "text": f"*Triggered by*\n`{actor}`"},
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Commit*\n<{commit_url}|`{commit_sha}`>",
-                      },
-                      {"type": "mrkdwn", "text": f"*State listing*\n{status(state_outcome)}"},
-                  ],
+                  "fields": context_fields,
               },
               {"type": "divider"},
               {
@@ -780,7 +820,7 @@ jobs:
                   "type": "section",
                   "text": {
                       "type": "mrkdwn",
-                      "text": ":cloud: *TERRAFORM DESTROY*\n" + status(destroy_outcome),
+                      "text": ":cloud: *TERRAFORM DESTROY*\n" + destroy_detail,
                   },
               },
               {"type": "divider"},
@@ -805,7 +845,10 @@ jobs:
                   "elements": [
                       {
                           "type": "mrkdwn",
-                          "text": "🎨 *Neon Lens*  ·  Infrastructure Operations  ·  GitHub Actions",
+                          "text": (
+                              "🎨 *Neon Lens*  ·  Infrastructure Operations  ·  "
+                              f"Run #{run_number} (attempt {run_attempt})"
+                          ),
                       }
                   ],
               },
@@ -834,4 +877,3 @@ jobs:
               print(f"Could not reach Slack webhook: {error}")
               raise
           PYTHON
-
