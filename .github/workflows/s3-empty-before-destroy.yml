@@ -1,0 +1,296 @@
+
+name: S3 Cleanup Before Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select the AWS environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - pre
+          - prod
+
+      bucket_name:
+        description: "Exact S3 bucket name to empty"
+        required: true
+        type: string
+
+      confirm_bucket_name:
+        description: "Re-enter the exact bucket name to confirm"
+        required: true
+        type: string
+
+      confirmation_phrase:
+        description: "Type DELETE-ALL-OBJECT-VERSIONS"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: s3-cleanup-${{ inputs.environment }}-${{ inputs.bucket_name }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Empty S3 Bucket - ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    environment: ${{ inputs.environment }}
+
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.environment }}
+      TARGET_BUCKET: ${{ inputs.bucket_name }}
+      CONFIRM_BUCKET: ${{ inputs.confirm_bucket_name }}
+      CONFIRMATION_PHRASE: ${{ inputs.confirmation_phrase }}
+
+    steps:
+      - name: Validate cleanup request
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$TARGET_BUCKET" ]]; then
+            echo "::error::Bucket name cannot be empty."
+            exit 1
+          fi
+
+          if [[ "$TARGET_BUCKET" != "$CONFIRM_BUCKET" ]]; then
+            echo "::error::Bucket names do not match."
+            exit 1
+          fi
+
+          if [[ "$CONFIRMATION_PHRASE" != "DELETE-ALL-OBJECT-VERSIONS" ]]; then
+            echo "::error::Deletion confirmation phrase is incorrect."
+            exit 1
+          fi
+
+          case "$TARGET_ENVIRONMENT" in
+            dev)
+              AWS_REGION="eu-west-1"
+              ;;
+            pre)
+              AWS_REGION="us-east-2"
+              ;;
+            prod)
+              AWS_REGION="us-east-1"
+              ;;
+            *)
+              echo "::error::Unsupported environment."
+              exit 1
+              ;;
+          esac
+
+          # Never allow the Terraform state bucket to be targeted.
+          if [[ "$TARGET_BUCKET" == "my-remote-infra-bucket-aryan" ]]; then
+            echo "::error::Refusing to target the Terraform state bucket."
+            exit 1
+          fi
+
+          echo "AWS_REGION=$AWS_REGION" >> "$GITHUB_ENV"
+
+          echo "Cleanup request validated."
+          echo "Environment: $TARGET_ENVIRONMENT"
+          echo "Bucket: $TARGET_BUCKET"
+          echo "Region: $AWS_REGION"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::666729139368:role/github-terraform
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: S3-Cleanup-${{ inputs.environment }}
+
+      - name: Verify AWS identity and bucket region
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          aws sts get-caller-identity
+
+          ACCOUNT_ID="$(aws sts get-caller-identity \
+            --query Account \
+            --output text)"
+
+          if [[ "$ACCOUNT_ID" != "666729139368" ]]; then
+            echo "::error::Unexpected AWS account: $ACCOUNT_ID"
+            exit 1
+          fi
+
+          LOCATION="$(aws s3api get-bucket-location \
+            --bucket "$TARGET_BUCKET" \
+            --query LocationConstraint \
+            --output text)"
+
+          # AWS returns null for buckets in us-east-1.
+          if [[ "$LOCATION" == "None" || "$LOCATION" == "null" ]]; then
+            LOCATION="us-east-1"
+          fi
+
+          if [[ "$LOCATION" != "$AWS_REGION" ]]; then
+            echo "::error::Bucket region is $LOCATION, but selected region is $AWS_REGION."
+            exit 1
+          fi
+
+          echo "Bucket region verified: $LOCATION"
+
+          echo "Bucket versioning configuration:"
+          aws s3api get-bucket-versioning \
+            --bucket "$TARGET_BUCKET" \
+            --output json
+
+      - name: Install cleanup dependency
+        run: |
+          python -m pip install --disable-pip-version-check boto3
+
+      - name: Delete all object versions and delete markers
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import os
+          import sys
+          import boto3
+          from botocore.exceptions import ClientError
+
+          bucket = os.environ["TARGET_BUCKET"]
+          region = os.environ["AWS_REGION"]
+
+          s3 = boto3.client("s3", region_name=region)
+
+          deleted_versions = 0
+          deleted_markers = 0
+          page_number = 0
+          key_marker = None
+          version_marker = None
+
+          print(f"Starting version-aware cleanup: {bucket}")
+
+          try:
+              while True:
+                  params = {
+                      "Bucket": bucket,
+                      "MaxKeys": 1000,
+                  }
+
+                  if key_marker is not None:
+                      params["KeyMarker"] = key_marker
+
+                  if version_marker is not None:
+                      params["VersionIdMarker"] = version_marker
+
+                  page = s3.list_object_versions(**params)
+                  page_number += 1
+
+                  versions = page.get("Versions", [])
+                  markers = page.get("DeleteMarkers", [])
+
+                  objects = [
+                      {
+                          "Key": item["Key"],
+                          "VersionId": item["VersionId"],
+                      }
+                      for item in versions + markers
+                  ]
+
+                  print(
+                      f"Page {page_number}: "
+                      f"{len(versions)} object versions, "
+                      f"{len(markers)} delete markers"
+                  )
+
+                  if objects:
+                      result = s3.delete_objects(
+                          Bucket=bucket,
+                          Delete={
+                              "Objects": objects,
+                              "Quiet": False,
+                          },
+                      )
+
+                      errors = result.get("Errors", [])
+
+                      if errors:
+                          for error in errors:
+                              print(
+                                  "Deletion error:",
+                                  error.get("Key"),
+                                  error.get("VersionId"),
+                                  error.get("Code"),
+                                  error.get("Message"),
+                              )
+                          raise RuntimeError(
+                              "S3 reported one or more deletion errors."
+                          )
+
+                      deleted_versions += len(versions)
+                      deleted_markers += len(markers)
+
+                  if not page.get("IsTruncated", False):
+                      break
+
+                  next_key = page.get("NextKeyMarker")
+                  next_version = page.get("NextVersionIdMarker")
+
+                  if (
+                      next_key == key_marker
+                      and next_version == version_marker
+                  ):
+                      raise RuntimeError(
+                          "S3 pagination did not advance; stopping safely."
+                      )
+
+                  key_marker = next_key
+                  version_marker = next_version
+
+              print("Version cleanup pass completed.")
+              print(f"Object versions processed: {deleted_versions}")
+              print(f"Delete markers processed: {deleted_markers}")
+
+              # Verify that no versions or delete markers remain.
+              remaining = s3.list_object_versions(
+                  Bucket=bucket,
+                  MaxKeys=1,
+              )
+
+              remaining_versions = remaining.get("Versions", [])
+              remaining_markers = remaining.get("DeleteMarkers", [])
+
+              if remaining_versions or remaining_markers:
+                  raise RuntimeError(
+                      "Verification failed: object versions or delete "
+                      "markers remain in the bucket."
+                  )
+
+              print("SUCCESS: No object versions or delete markers remain.")
+              print(f"Bucket is ready for a Terraform destroy attempt: {bucket}")
+
+          except (ClientError, RuntimeError) as exc:
+              print(f"::error::S3 cleanup failed: {exc}")
+              sys.exit(1)
+          PY
+
+      - name: Cleanup summary
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          echo "============================================"
+          echo "S3 CLEANUP COMPLETED"
+          echo "============================================"
+          echo "Environment: $TARGET_ENVIRONMENT"
+          echo "Bucket: $TARGET_BUCKET"
+          echo "Region: $AWS_REGION"
+          echo ""
+          echo "All object versions and delete markers"
+          echo "were checked and the bucket is empty."
+          echo ""
+          echo "Next step: run the existing Terraform"
+          echo "destroy workflow for this environment."
+          echo "============================================"
