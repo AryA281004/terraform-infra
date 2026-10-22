@@ -488,6 +488,7 @@ jobs:
       # Slack notification
       # ----------------------------------------------------------
 
+      
       - name: Send Terraform apply result to Slack
         if: always()
         shell: bash
@@ -495,106 +496,230 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_APPLY_URL }}
           APPLY_OUTCOME: ${{ steps.terraform-apply.outcome }}
           SELECTED_BRANCH: ${{ inputs.branch }}
-          SELECTED_ENVIRONMENT: ${{ inputs.branch }}
+          SELECTED_ENVIRONMENT: ${{ inputs.environment || inputs.branch }}
           SELECTED_REGION: ${{ env.AWS_REGION }}
           PLAN_RUN_ID: ${{ inputs.plan_run_id }}
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          PLAN_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ inputs.plan_run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PLAN_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.plan_run_id }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
+          set -euo pipefail
+
           python3 <<'PY'
           import json
           import os
+          import sys
           import urllib.error
           import urllib.request
+          from datetime import datetime, timezone
 
-          webhook = os.environ["SLACK_WEBHOOK_URL"]
-          outcome = os.environ["APPLY_OUTCOME"]
-          branch = os.environ["SELECTED_BRANCH"]
-          environment = os.environ["SELECTED_ENVIRONMENT"]
-          region = os.environ["SELECTED_REGION"]
-          plan_run_id = os.environ["PLAN_RUN_ID"]
+          # ---------------------------------------------------------
+          # Configuration and workflow metadata
+          # ---------------------------------------------------------
+
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+          outcome = os.environ.get("APPLY_OUTCOME", "unknown").lower()
+          branch = os.environ.get("SELECTED_BRANCH", "unknown")
+          environment = os.environ.get("SELECTED_ENVIRONMENT", "unknown")
+          region = os.environ.get("SELECTED_REGION", "unknown")
+          plan_run_id = os.environ.get("PLAN_RUN_ID", "").strip()
           run_url = os.environ["RUN_URL"]
           plan_run_url = os.environ["PLAN_RUN_URL"]
+          commit_url = os.environ["COMMIT_URL"]
           repository = os.environ["REPOSITORY"]
-          commit_sha = os.environ["COMMIT_SHA"][:7]
+          commit_sha = os.environ.get("COMMIT_SHA", "")[:7] or "unknown"
+          actor = os.environ.get("ACTOR", "unknown")
+          workflow_name = os.environ.get("WORKFLOW_NAME", "Terraform Apply")
+          run_number = os.environ.get("RUN_NUMBER", "unknown")
+          run_attempt = os.environ.get("RUN_ATTEMPT", "1")
+          event_name = os.environ.get("EVENT_NAME", "unknown")
 
-          # -----------------------------------------------------
-          # Status
-          # -----------------------------------------------------
+          if not webhook:
+              print(
+                  "SLACK_WEBHOOK_APPLY_URL is empty or unavailable.",
+                  file=sys.stderr
+              )
+              sys.exit(1)
 
-          if outcome == "success":
-              emoji = "🚀"
-              title = "Terraform Apply Succeeded"
-              status = "Infrastructure changes were successfully applied."
+          # ---------------------------------------------------------
+          # Status presentation
+          # ---------------------------------------------------------
+
+          statuses = {
+              "success": {
+                  "emoji": "🚀",
+                  "label": "APPLY SUCCEEDED",
+                  "color": "#2EB886",
+                  "summary": (
+                      "Terraform apply completed successfully. "
+                      "Review the workflow logs for the execution details."
+                  ),
+                  "icon": ":white_check_mark:"
+              },
+              "failure": {
+                  "emoji": "🚨",
+                  "label": "APPLY FAILED",
+                  "color": "#E01E5A",
+                  "summary": (
+                      "Terraform apply failed. Open the apply workflow "
+                      "to identify the failing step and review its logs."
+                  ),
+                  "icon": ":x:"
+              },
+              "cancelled": {
+                  "emoji": "🛑",
+                  "label": "APPLY CANCELLED",
+                  "color": "#E0A12F",
+                  "summary": (
+                      "The apply step was cancelled. Verify the resulting "
+                      "infrastructure state before retrying."
+                  ),
+                  "icon": ":octagonal_sign:"
+              },
+              "skipped": {
+                  "emoji": "⏭️",
+                  "label": "APPLY SKIPPED",
+                  "color": "#808B98",
+                  "summary": (
+                      "The apply step did not run. Check workflow conditions, "
+                      "approvals, and prerequisite steps."
+                  ),
+                  "icon": ":fast_forward:"
+              }
+          }
+
+          status_info = statuses.get(outcome, {
+              "emoji": "⚠️",
+              "label": f"APPLY STATUS: {outcome.upper()}",
+              "color": "#E0A12F",
+              "summary": (
+                  "The apply step returned an unrecognized outcome. "
+                  "Inspect the workflow run to confirm what happened."
+              ),
+              "icon": ":warning:"
+          })
+
+          # ---------------------------------------------------------
+          # Formatting helpers
+          # ---------------------------------------------------------
+
+          def safe(value):
+              """Prevent Slack mrkdwn control characters in metadata."""
+              return (
+                  str(value)
+                  .replace("&", "&amp;")
+                  .replace("<", "&lt;")
+                  .replace(">", "&gt;")
+              )
+
+          def field(label, value):
+              return {
+                  "type": "mrkdwn",
+                  "text": f"*{label}*\n{safe(value)}"
+              }
+
+          timestamp = datetime.now(timezone.utc).strftime(
+              "%d %b %Y, %H:%M UTC"
+          )
+
+          # ---------------------------------------------------------
+          # Deployment context
+          # ---------------------------------------------------------
+
+          if plan_run_id:
+              plan_reference = (
+                  f"<{plan_run_url}|View plan run #{safe(plan_run_id)}>"
+              )
+              plan_description = (
+                  f"The apply is associated with plan workflow run "
+                  f"#{safe(plan_run_id)}. Check the apply workflow to verify "
+                  "that the intended saved plan artifact was used."
+              )
           else:
-              emoji = "❌"
-              title = "Terraform Apply Failed"
-              status = "Terraform apply failed. Check the workflow logs."
+              plan_reference = "_No plan run ID supplied_"
+              plan_description = (
+                  "No plan run ID was supplied. Verify which plan was used "
+                  "before treating this deployment as fully traceable."
+              )
 
-          # -----------------------------------------------------
-          # Slack blocks
-          # -----------------------------------------------------
+          fields = [
+              field("Environment", f"`{environment}`"),
+              field("AWS Region", f"`{region}`"),
+              field("Branch", f"`{branch}`"),
+              field("Repository", f"`{repository}`"),
+              field("Commit", f"<{commit_url}|`{commit_sha}`>"),
+              field("Triggered By", f"`{actor}`"),
+              field("Workflow Run", f"#{run_number} · Attempt {run_attempt}"),
+              field("Trigger Event", f"`{event_name}`")
+          ]
+
+          # ---------------------------------------------------------
+          # Slack Block Kit message
+          # ---------------------------------------------------------
 
           blocks = [
               {
                   "type": "header",
                   "text": {
                       "type": "plain_text",
-                      "text": f"{emoji} {title}"
+                      "text": (
+                          f"{status_info['emoji']} Terraform "
+                          f"{status_info['label']}"
+                      ),
+                      "emoji": True
                   }
               },
-
-              {
-                  "type": "section",
-                  "fields": [
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Repository:*\n`{repository}`"
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Branch:*\n`{branch}`"
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Environment:*\n`{environment}`"
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*AWS Region:*\n`{region}`"
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Commit:*\n`{commit_sha}`"
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Plan Run:*\n<{plan_run_url}|#{plan_run_id}>"
-                      }
-                  ]
-              },
-
-              {
-                  "type": "section",
-                  "text": {
-                      "type": "mrkdwn",
-                      "text": status
-                  }
-              },
-
               {
                   "type": "section",
                   "text": {
                       "type": "mrkdwn",
                       "text": (
-                          "*Terraform Plan:*\n"
-                          f"The exact plan from Run #{plan_run_id} was used for this apply."
+                          f"{status_info['icon']}  *Deployment status*\n"
+                          f"{status_info['summary']}"
                       )
                   }
               },
-
+              {"type": "divider"},
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": "*DEPLOYMENT DETAILS*"
+                  },
+                  "fields": fields
+              },
+              {"type": "divider"},
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": (
+                          "*PLAN TRACEABILITY*\n"
+                          f"{plan_reference}\n"
+                          f"{plan_description}"
+                      )
+                  }
+              },
+              {
+                  "type": "context",
+                  "elements": [
+                      {
+                          "type": "mrkdwn",
+                          "text": (
+                              f"Workflow: *{safe(workflow_name)}*  •  "
+                              f"Run: `#{safe(run_number)}`  •  "
+                              f"Reported: {timestamp}"
+                          )
+                      }
+                  ]
+              },
               {
                   "type": "actions",
                   "elements": [
@@ -602,64 +727,117 @@ jobs:
                           "type": "button",
                           "text": {
                               "type": "plain_text",
-                              "text": "View Apply Workflow"
+                              "text": "View Apply Run",
+                              "emoji": True
                           },
-                          "url": run_url
+                          "style": (
+                              "primary"
+                              if outcome == "success"
+                              else "danger"
+                              if outcome == "failure"
+                              else None
+                          ),
+                          "url": run_url,
+                          "action_id": "view_apply_run"
                       },
                       {
                           "type": "button",
                           "text": {
                               "type": "plain_text",
-                              "text": "View Plan Workflow"
+                              "text": "View Commit",
+                              "emoji": True
                           },
-                          "url": plan_run_url
+                          "url": commit_url,
+                          "action_id": "view_commit"
                       }
                   ]
               }
           ]
 
+          # Slack does not accept a null button style. Remove it for
+          # outcomes that do not have a dedicated button style.
+          for block in blocks:
+              if block.get("type") == "actions":
+                  for element in block["elements"]:
+                      if element.get("style") is None:
+                          element.pop("style", None)
+
+          if plan_run_id:
+              blocks[-1]["elements"].append({
+                  "type": "button",
+                  "text": {
+                      "type": "plain_text",
+                      "text": "View Plan Run",
+                      "emoji": True
+                  },
+                  "url": plan_run_url,
+                  "action_id": "view_plan_run"
+              })
+
           payload = {
-              "text": f"{emoji} {title} - {repository} - {branch}",
-              "blocks": blocks
+              "text": (
+                  f"{status_info['emoji']} Terraform "
+                  f"{status_info['label']} | "
+                  f"{repository} | {environment} | {branch}"
+              ),
+              "attachments": [
+                  {
+                      "color": status_info["color"],
+                      "blocks": blocks
+                  }
+              ]
           }
 
-          # -----------------------------------------------------
-          # Send to Slack
-          # -----------------------------------------------------
+          # ---------------------------------------------------------
+          # Deliver notification and fail visibly if Slack rejects it
+          # ---------------------------------------------------------
 
           request = urllib.request.Request(
               webhook,
               data=json.dumps(payload).encode("utf-8"),
-              headers={
-                  "Content-Type": "application/json"
-              },
+              headers={"Content-Type": "application/json"},
               method="POST"
           )
 
           try:
-              with urllib.request.urlopen(request) as response:
-                  response_body = response.read().decode("utf-8")
+              with urllib.request.urlopen(request, timeout=15) as response:
+                  response_body = response.read().decode(
+                      "utf-8",
+                      errors="replace"
+                  )
 
-                  if response.status < 200 or response.status >= 300:
+                  if not 200 <= response.status < 300:
                       raise RuntimeError(
-                          f"Slack webhook failed: HTTP {response.status} - "
-                          f"{response_body}"
+                          f"Slack rejected the notification: "
+                          f"HTTP {response.status}: {response_body}"
                       )
 
-                  print("Slack notification sent successfully.")
-                  print(f"Slack response: {response_body}")
+                  if response_body.strip().lower() != "ok":
+                      print(
+                          "Warning: Slack returned an unexpected response: "
+                          f"{response_body}"
+                      )
+                  else:
+                      print(
+                          "Slack notification delivered successfully."
+                      )
+
+                  print(f"Apply outcome: {outcome}")
+                  print(f"Environment: {environment}")
+                  print(f"Workflow run: {run_url}")
 
           except urllib.error.HTTPError as error:
-              response_body = error.read().decode(
-                  "utf-8",
-                  errors="replace"
-              )
-
+              body = error.read().decode("utf-8", errors="replace")
               print(
-                  f"Slack webhook failed: "
-                  f"HTTP {error.code} - {response_body}"
+                  f"Slack HTTP error {error.code}: {body}",
+                  file=sys.stderr
               )
+              raise
 
+          except (urllib.error.URLError, TimeoutError) as error:
+              print(
+                  f"Unable to deliver Slack notification: {error}",
+                  file=sys.stderr
+              )
               raise
           PY
-
