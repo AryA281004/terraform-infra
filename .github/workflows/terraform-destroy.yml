@@ -618,7 +618,7 @@ jobs:
           retention-days: 7
 
 
-           # ---------------------------------------------------------
+            # ---------------------------------------------------------
       # Slack notification: destroy + S3 cleanup
       # ---------------------------------------------------------
       - name: "📣 Send Infrastructure Report to Slack"
@@ -740,13 +740,16 @@ jobs:
 
           def status(value):
               labels = {
-                  "success": "🟢 Success",
-                  "failure": "🔴 Failed",
-                  "cancelled": "⚪ Cancelled",
-                  "skipped": "⏭️ Skipped / not reached",
-                  "unknown": "⚪ Not reached",
+                  "success": "🟢 *Success*",
+                  "failure": "🔴 *Failed*",
+                  "cancelled": "⚪ *Cancelled*",
+                  "skipped": "⏭️ *Skipped / not reached*",
+                  "unknown": "⚪ *Not reached*",
               }
-              return labels.get(value, f"⚪ {value}")
+              return labels.get(value, f"⚪ *{value}*")
+
+          def label(text):
+              return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
 
           if cleanup_outcome == "success":
               if bucket_count == "0":
@@ -760,7 +763,7 @@ jobs:
                       f"🏷️ *{markers_deleted}* delete markers removed"
                   )
           elif cleanup_outcome == "failure":
-              cleanup_detail = "🔴 Cleanup failed — see workflow logs"
+              cleanup_detail = "🔴 *Cleanup failed* — see workflow logs"
           else:
               cleanup_detail = status(cleanup_outcome)
 
@@ -800,29 +803,14 @@ jobs:
                   "text": {"type": "mrkdwn", "text": summary},
               },
               {"type": "divider"},
-              {
-                  "type": "section",
-                  "text": {
-                      "type": "mrkdwn",
-                      "text": ":gear: *DEPLOYMENT CONTEXT*",
-                  },
-                  "fields": context_fields,
-              },
+              label(":gear:  *DEPLOYMENT CONTEXT*"),
+              {"type": "section", "fields": context_fields},
               {"type": "divider"},
-              {
-                  "type": "section",
-                  "text": {
-                      "type": "mrkdwn",
-                      "text": ":broom: *S3 PRE-DESTROY CLEANUP*\n" + cleanup_detail,
-                  },
-              },
-              {
-                  "type": "section",
-                  "text": {
-                      "type": "mrkdwn",
-                      "text": ":cloud: *TERRAFORM DESTROY*\n" + destroy_detail,
-                  },
-              },
+              label(":broom:  *S3 PRE-DESTROY CLEANUP*"),
+              {"type": "section", "text": {"type": "mrkdwn", "text": cleanup_detail}},
+              {"type": "divider"},
+              label(":cloud:  *TERRAFORM DESTROY*"),
+              {"type": "section", "text": {"type": "mrkdwn", "text": destroy_detail}},
               {"type": "divider"},
               {
                   "type": "actions",
