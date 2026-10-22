@@ -281,230 +281,234 @@ jobs:
           fi
 
       # ---------------------------------------------------------
+      # Install boto3 for version-aware S3 cleanup
+      # ---------------------------------------------------------
+      - name: Install S3 cleanup dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check boto3
+
+      # ---------------------------------------------------------
       # Empty S3 buckets before Terraform destroys them
       # ---------------------------------------------------------
-      - name: Empty S3 buckets before destroy
+      - name: "🧹 Inspect & Clean S3 Buckets"
         id: empty-s3-buckets
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          echo "=================================================="
-          echo " S3 PRE-DESTROY CLEANUP"
-          echo "=================================================="
+          echo ""
+          echo "╔══════════════════════════════════════════════════════════╗"
+          echo "║              NEON LENS  |  S3 CLEANUP                    ║"
+          echo "╚══════════════════════════════════════════════════════════╝"
+          echo ""
 
           if [ ! -f s3-buckets-to-clean.txt ]; then
-            echo "::error title=S3 target list missing::Expected s3-buckets-to-clean.txt was not found."
-            exit 1
-          fi
-
-          if ! command -v python3 >/dev/null 2>&1; then
-            echo "::error title=Python unavailable::Python 3 is required for S3 cleanup."
+            echo "::error title=Cleanup targets missing::s3-buckets-to-clean.txt was not found."
             exit 1
           fi
 
           if ! python3 -c 'import boto3' >/dev/null 2>&1; then
-            echo "::error title=boto3 unavailable::Install boto3 before running S3 cleanup."
+            echo "::error title=Missing dependency::boto3 is not installed."
             exit 1
           fi
 
-          python3 - <<'PY'
+          python3 - <<'PYTHON'
+          import os
+          import re
           import boto3
-          import sys
           from botocore.exceptions import BotoCoreError, ClientError
 
           STATE_BUCKET = "my-remote-infra-bucket-aryan"
           TARGET_FILE = "s3-buckets-to-clean.txt"
+          SUMMARY_FILE = os.environ.get("GITHUB_STEP_SUMMARY")
+          OUTPUT_FILE = os.environ.get("GITHUB_OUTPUT")
 
           def fail(message):
+              print(f"\n❌ CLEANUP FAILED: {message}")
               print(f"::error title=S3 cleanup failed::{message}")
               raise SystemExit(1)
 
+          def section(title):
+              print("\n" + "━" * 62)
+              print(f"  {title}")
+              print("━" * 62)
+
+          def output_metrics(bucket_count, already_clean, cleaned,
+                            versions_deleted, markers_deleted):
+              values = {
+                  "bucket_count": bucket_count,
+                  "already_clean": already_clean,
+                  "cleaned": cleaned,
+                  "versions_deleted": versions_deleted,
+                  "markers_deleted": markers_deleted,
+              }
+              if OUTPUT_FILE:
+                  with open(OUTPUT_FILE, "a", encoding="utf-8") as out:
+                      for key, value in values.items():
+                          out.write(f"{key}={value}\n")
+              return values
+
+          def write_summary(metrics, bucket_results, no_targets=False):
+              if not SUMMARY_FILE:
+                  return
+              with open(SUMMARY_FILE, "a", encoding="utf-8") as summary:
+                  summary.write("\n## 🧹 S3 Pre-Destroy Cleanup\n\n")
+                  if no_targets:
+                      summary.write("ℹ️ No S3 buckets were scheduled for deletion.\n\n")
+                  summary.write("| Metric | Result |\n|---|---:|\n")
+                  summary.write(f"| Buckets scheduled | {metrics['bucket_count']} |\n")
+                  summary.write(f"| Already clean | {metrics['already_clean']} |\n")
+                  summary.write(f"| Cleaned and verified | {metrics['cleaned']} |\n")
+                  summary.write(f"| Object versions deleted | {metrics['versions_deleted']} |\n")
+                  summary.write(f"| Delete markers deleted | {metrics['markers_deleted']} |\n")
+                  if bucket_results:
+                      summary.write("\n### Bucket-by-bucket results\n\n")
+                      summary.write("| Bucket | Result | Versions deleted | Markers deleted |\n")
+                      summary.write("|---|---|---:|---:|\n")
+                      for item in bucket_results:
+                          summary.write(
+                              f"| `{item['bucket']}` | {item['status']} | "
+                              f"{item['versions']} | {item['markers']} |\n"
+                          )
+
           # -----------------------------------------------------
-          # Validate and deduplicate cleanup targets
+          # 1/4 — Validate target list
           # -----------------------------------------------------
+          section("🔎 1/4  |  TARGET VALIDATION")
           try:
-              with open(TARGET_FILE, encoding="utf-8") as f:
-                  raw_buckets = [
-                      line.strip()
-                      for line in f
-                      if line.strip()
-                  ]
+              with open(TARGET_FILE, encoding="utf-8") as file:
+                  buckets = list(dict.fromkeys(
+                      line.strip() for line in file if line.strip()
+                  ))
           except OSError as exc:
-              fail(f"Could not read {TARGET_FILE}: {exc}")
+              fail(f"Cannot read {TARGET_FILE}: {exc}")
 
-          buckets = list(dict.fromkeys(raw_buckets))
-
-          print("\n[1/4] VALIDATING CLEANUP TARGETS")
-
-          if not buckets:
-              print("INFO: No S3 buckets are scheduled for deletion.")
-              print("RESULT: Nothing to clean up.")
-              raise SystemExit(0)
-
+          # AWS general-purpose S3 bucket naming format (basic validation).
+          bucket_pattern = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
           invalid = [
               bucket for bucket in buckets
               if (
-                  len(bucket) > 63
-                  or len(bucket) < 3
-                  or not all(
-                      c.islower() or c.isdigit() or c in ".-"
-                      for c in bucket
-                  )
-                  or not bucket[0].isalnum()
-                  or not bucket[-1].isalnum()
+                  not bucket_pattern.fullmatch(bucket)
                   or ".." in bucket
                   or ".-" in bucket
                   or "-." in bucket
+                  or re.fullmatch(r"\d+\.\d+\.\d+\.\d+", bucket)
               )
           ]
-
           if invalid:
               fail(f"Invalid S3 bucket name(s): {', '.join(invalid)}")
 
           if STATE_BUCKET in buckets:
               fail(
-                  f"Safety guard blocked cleanup of Terraform state "
-                  f"bucket '{STATE_BUCKET}'."
+                  f"Safety guard blocked the Terraform state bucket "
+                  f"'{STATE_BUCKET}'. It must never be emptied by this workflow."
               )
 
-          print(f"PASS: {len(buckets)} unique bucket(s) to inspect.")
+          if not buckets:
+              print("ℹ️  No S3 buckets are scheduled for deletion.")
+              print("✅ Nothing needs cleaning; continuing to Terraform destroy.")
+              metrics = output_metrics(0, 0, 0, 0, 0)
+              write_summary(metrics, [], no_targets=True)
+              raise SystemExit(0)
+
+          print(f"✅ Validated {len(buckets)} unique bucket(s).")
           for bucket in buckets:
-              print(f"  - {bucket}")
+              print(f"   • {bucket}")
 
           # -----------------------------------------------------
-          # Create AWS session and validate credentials
+          # 2/4 — Validate AWS credentials and account
           # -----------------------------------------------------
-          print("\n[2/4] VALIDATING AWS ACCESS")
-
+          section("🔐 2/4  |  AWS AUTHENTICATION")
           try:
               session = boto3.Session()
-              credentials = session.get_credentials()
-
-              if credentials is None:
+              if session.get_credentials() is None:
                   fail("No AWS credentials are available to this workflow.")
-
-              sts = session.client("sts")
-              identity = sts.get_caller_identity()
+              identity = session.client("sts").get_caller_identity()
               account_id = identity.get("Account", "unknown")
-
-              print(f"PASS: AWS credentials available. Account: {account_id}")
-
+              print(f"✅ AWS identity verified | Account: {account_id}")
           except (BotoCoreError, ClientError) as exc:
               fail(f"Could not validate AWS credentials: {exc}")
 
           # -----------------------------------------------------
-          # Inspect and clean buckets
+          # 3/4 — Inspect and clean only planned buckets
           # -----------------------------------------------------
-          print("\n[3/4] INSPECTING AND CLEANING BUCKETS")
-
-          total_clean = 0
-          total_cleaned = 0
-          total_versions_deleted = 0
-          total_markers_deleted = 0
+          section("🧹 3/4  |  BUCKET INSPECTION & CLEANUP")
+          already_clean = 0
+          cleaned = 0
+          versions_deleted_total = 0
+          markers_deleted_total = 0
+          results = []
 
           for index, bucket in enumerate(buckets, start=1):
-              print("\n--------------------------------------------------")
-              print(f"BUCKET {index}/{len(buckets)}: {bucket}")
-              print("--------------------------------------------------")
-
+              print("\n" + "─" * 62)
+              print(f"📦 BUCKET {index}/{len(buckets)}  |  {bucket}")
+              print("─" * 62)
               try:
                   default_s3 = session.client("s3")
                   location = default_s3.get_bucket_location(
                       Bucket=bucket
                   ).get("LocationConstraint")
-
                   region = location or "us-east-1"
                   s3 = session.client("s3", region_name=region)
+                  print(f"🌍 Region: {region}")
 
-                  print(f"Region: {region}")
-
-                  # Verify access and inspect the first page.
-                  first_page = s3.list_object_versions(
-                      Bucket=bucket,
-                      MaxKeys=1,
-                  )
-
-                  has_versions = bool(first_page.get("Versions"))
-                  has_markers = bool(first_page.get("DeleteMarkers"))
-
-                  if not has_versions and not has_markers:
-                      print(
-                          f"ALREADY CLEAN: {bucket} has no object "
-                          "versions or delete markers."
-                      )
-                      total_clean += 1
+                  first_page = s3.list_object_versions(Bucket=bucket, MaxKeys=1)
+                  if (
+                      not first_page.get("Versions")
+                      and not first_page.get("DeleteMarkers")
+                  ):
+                      print("🟢 STATUS: ALREADY CLEAN — no versions or delete markers found.")
+                      already_clean += 1
+                      results.append({
+                          "bucket": bucket, "status": "🟢 Already clean",
+                          "versions": 0, "markers": 0,
+                      })
                       continue
 
-                  print(
-                      f"CLEANUP REQUIRED: {bucket} contains object "
-                      "versions and/or delete markers."
-                  )
-                  print("Action: deleting all listed versions and markers.")
-
+                  print("🟡 STATUS: CLEANUP REQUIRED")
+                  print("   Removing all object versions and delete markers...")
                   key_marker = None
                   version_marker = None
                   deleted_versions = 0
                   deleted_markers = 0
 
                   while True:
-                      params = {
-                          "Bucket": bucket,
-                          "MaxKeys": 1000,
-                      }
-
+                      params = {"Bucket": bucket, "MaxKeys": 1000}
                       if key_marker is not None:
                           params["KeyMarker"] = key_marker
-
                       if version_marker is not None:
                           params["VersionIdMarker"] = version_marker
 
                       page = s3.list_object_versions(**params)
-
                       versions = page.get("Versions", [])
                       markers = page.get("DeleteMarkers", [])
-
                       objects = [
-                          {
-                              "Key": item["Key"],
-                              "VersionId": item["VersionId"],
-                          }
+                          {"Key": item["Key"], "VersionId": item["VersionId"]}
                           for item in versions + markers
                       ]
 
                       if objects:
-                          result = s3.delete_objects(
+                          response = s3.delete_objects(
                               Bucket=bucket,
-                              Delete={
-                                  "Objects": objects,
-                                  "Quiet": False,
-                              },
+                              Delete={"Objects": objects, "Quiet": False},
                           )
-
-                          errors = result.get("Errors", [])
-
+                          errors = response.get("Errors", [])
                           if errors:
                               for error in errors:
                                   print(
-                                      "Deletion error: "
-                                      f"key={error.get('Key')!r}, "
-                                      f"version={error.get('VersionId')!r}, "
-                                      f"code={error.get('Code')!r}, "
-                                      f"message={error.get('Message')!r}"
+                                      f"❌ Delete error | key={error.get('Key')!r} | "
+                                      f"version={error.get('VersionId')!r} | "
+                                      f"{error.get('Code')}: {error.get('Message')}"
                                   )
-
-                              fail(
-                                  f"One or more object deletions failed "
-                                  f"for bucket '{bucket}'."
-                              )
+                              fail(f"One or more deletions failed for '{bucket}'.")
 
                           deleted_versions += len(versions)
                           deleted_markers += len(markers)
-
                           print(
-                              f"Progress: {deleted_versions} object "
-                              f"version(s), {deleted_markers} delete "
-                              "marker(s) deleted."
+                              f"   ✓ Batch processed | versions: {deleted_versions} | "
+                              f"delete markers: {deleted_markers}"
                           )
 
                       if not page.get("IsTruncated", False):
@@ -512,62 +516,49 @@ jobs:
 
                       next_key = page.get("NextKeyMarker")
                       next_version = page.get("NextVersionIdMarker")
-
-                      if (
-                          next_key == key_marker
-                          and next_version == version_marker
-                      ):
-                          fail(
-                              f"Pagination stopped advancing for "
-                              f"bucket '{bucket}'."
-                          )
-
+                      if next_key == key_marker and next_version == version_marker:
+                          fail(f"Pagination stopped advancing for '{bucket}'.")
                       key_marker = next_key
                       version_marker = next_version
 
-                  # Verify cleanup completed.
-                  remaining = s3.list_object_versions(
-                      Bucket=bucket,
-                      MaxKeys=1,
-                  )
+                  # Confirm no object versions or delete markers remain.
+                  remaining = s3.list_object_versions(Bucket=bucket, MaxKeys=1)
+                  if remaining.get("Versions") or remaining.get("DeleteMarkers"):
+                      fail(f"Final verification failed: '{bucket}' is not empty.")
 
-                  if (
-                      remaining.get("Versions")
-                      or remaining.get("DeleteMarkers")
-                  ):
-                      fail(
-                          f"Verification failed: bucket '{bucket}' "
-                          "still contains versions or delete markers."
-                      )
-
-                  print(f"VERIFIED CLEAN: {bucket}")
-                  print(f"  Object versions deleted: {deleted_versions}")
-                  print(f"  Delete markers deleted: {deleted_markers}")
-
-                  total_cleaned += 1
-                  total_versions_deleted += deleted_versions
-                  total_markers_deleted += deleted_markers
+                  print("✅ STATUS: CLEANUP VERIFIED")
+                  print(f"   Object versions deleted : {deleted_versions}")
+                  print(f"   Delete markers deleted  : {deleted_markers}")
+                  cleaned += 1
+                  versions_deleted_total += deleted_versions
+                  markers_deleted_total += deleted_markers
+                  results.append({
+                      "bucket": bucket, "status": "✅ Cleaned & verified",
+                      "versions": deleted_versions, "markers": deleted_markers,
+                  })
 
               except (BotoCoreError, ClientError) as exc:
                   fail(f"AWS operation failed for bucket '{bucket}': {exc}")
 
           # -----------------------------------------------------
-          # Final summary
+          # 4/4 — Summary, workflow outputs, and job summary
           # -----------------------------------------------------
-          print("\n[4/4] FINAL CLEANUP SUMMARY")
-          print("==================================================")
-          print(f"Buckets inspected:          {len(buckets)}")
-          print(f"Already clean:              {total_clean}")
-          print(f"Cleaned and verified:       {total_cleaned}")
-          print(f"Object versions deleted:    {total_versions_deleted}")
-          print(f"Delete markers deleted:     {total_markers_deleted}")
-          print("==================================================")
+          section("📊 4/4  |  CLEANUP SUMMARY")
+          print(f"  Buckets scheduled         : {len(buckets)}")
+          print(f"  Already clean             : {already_clean}")
+          print(f"  Cleaned & verified        : {cleaned}")
+          print(f"  Object versions deleted   : {versions_deleted_total}")
+          print(f"  Delete markers deleted    : {markers_deleted_total}")
+          print("━" * 62)
+          print("✅ ALL TARGETED BUCKETS PASSED CLEANUP VERIFICATION")
+          print("🚀 Terraform destroy may proceed.")
 
-          print("SUCCESS: All targeted buckets passed cleanup verification.")
-          print("Terraform destroy may proceed.")
-
-          PY
-
+          metrics = output_metrics(
+              len(buckets), already_clean, cleaned,
+              versions_deleted_total, markers_deleted_total
+          )
+          write_summary(metrics, results)
+          PYTHON
 
       - name: Add state summary
         if: always()
@@ -628,9 +619,9 @@ jobs:
 
 
       # ---------------------------------------------------------
-      # Slack notification — Terraform destroy + S3 cleanup
+      # Beautiful Slack notification — destroy + S3 cleanup
       # ---------------------------------------------------------
-      - name: Send Terraform destroy result to Slack
+      - name: "📣 Send Infrastructure Report to Slack"
         if: always()
         shell: bash
         env:
@@ -638,133 +629,159 @@ jobs:
           STATE_OUTCOME: ${{ steps.state-list.outcome }}
           S3_CLEANUP_OUTCOME: ${{ steps.empty-s3-buckets.outcome }}
           DESTROY_OUTCOME: ${{ steps.terraform-destroy.outcome }}
+          S3_BUCKET_COUNT: ${{ steps.empty-s3-buckets.outputs.bucket_count }}
+          S3_ALREADY_CLEAN: ${{ steps.empty-s3-buckets.outputs.already_clean }}
+          S3_CLEANED: ${{ steps.empty-s3-buckets.outputs.cleaned }}
+          S3_VERSIONS_DELETED: ${{ steps.empty-s3-buckets.outputs.versions_deleted }}
+          S3_MARKERS_DELETED: ${{ steps.empty-s3-buckets.outputs.markers_deleted }}
           SELECTED_BRANCH: ${{ inputs.branch }}
           SELECTED_REGION: ${{ env.AWS_REGION }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_URL: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
           ACTOR: ${{ github.actor }}
         run: |
-          python3 <<'PY'
+          python3 <<'PYTHON'
           import json
           import os
           import urllib.error
           import urllib.request
 
-          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
-          state_outcome = os.environ.get("STATE_OUTCOME", "unknown")
-          cleanup_outcome = os.environ.get("S3_CLEANUP_OUTCOME", "unknown")
-          destroy_outcome = os.environ.get("DESTROY_OUTCOME", "unknown")
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+          state_outcome = os.environ.get("STATE_OUTCOME") or "unknown"
+          cleanup_outcome = os.environ.get("S3_CLEANUP_OUTCOME") or "unknown"
+          destroy_outcome = os.environ.get("DESTROY_OUTCOME") or "unknown"
           branch = os.environ.get("SELECTED_BRANCH", "unknown")
           region = os.environ.get("SELECTED_REGION") or "n/a"
           run_url = os.environ["RUN_URL"]
+          commit_url = os.environ["COMMIT_URL"]
           repository = os.environ["REPOSITORY"]
           commit_sha = os.environ["COMMIT_SHA"][:7]
           actor = os.environ["ACTOR"]
 
+          bucket_count = os.environ.get("S3_BUCKET_COUNT") or "0"
+          already_clean = os.environ.get("S3_ALREADY_CLEAN") or "0"
+          cleaned = os.environ.get("S3_CLEANED") or "0"
+          versions_deleted = os.environ.get("S3_VERSIONS_DELETED") or "0"
+          markers_deleted = os.environ.get("S3_MARKERS_DELETED") or "0"
+
           if not webhook:
-              print("SLACK_WEBHOOK_DESTROY_URL is not configured; skipping notification.")
+              print("SLACK_WEBHOOK_DESTROY_URL is not configured; Slack notification skipped.")
               raise SystemExit(0)
 
-          # Overall result
-          if destroy_outcome == "success":
-              emoji = "✅"
-              color = "#2EB886"
-              title = "Terraform Destroy Completed"
-              summary = "Infrastructure destruction completed successfully."
-          elif cleanup_outcome == "failure":
-              emoji = "🛑"
-              color = "#E01E5A"
-              title = "S3 Cleanup Failed"
+          # Choose the overall outcome with failure causes taking precedence.
+          if cleanup_outcome == "failure":
+              emoji, color = "🛑", "#E01E5A"
+              title = "S3 CLEANUP BLOCKED THE DESTROY"
               summary = (
-                  "The S3 cleanup step failed. Terraform destroy should not "
-                  "proceed after a failed cleanup."
+                  ":no_entry: *Safety gate engaged.* S3 cleanup failed, so "
+                  "Terraform destroy should have been skipped. Review the job logs "
+                  "before retrying."
               )
           elif state_outcome == "failure":
-              emoji = "❌"
-              color = "#E01E5A"
-              title = "Terraform Destroy Aborted"
-              summary = "The state-list step failed. Check the workflow logs."
-          elif destroy_outcome == "failure":
-              emoji = "🚨"
-              color = "#E01E5A"
-              title = "Terraform Destroy Failed"
+              emoji, color = "🚫", "#E01E5A"
+              title = "DESTROY ABORTED — STATE CHECK FAILED"
               summary = (
-                  "Terraform destroy failed. Check the logs to determine "
-                  "whether any resources were partially destroyed."
+                  ":warning: Terraform state could not be validated or was empty. "
+                  "No successful destroy should be assumed; inspect the workflow run."
+              )
+          elif destroy_outcome == "success":
+              emoji, color = "✅", "#2EB886"
+              title = "INFRASTRUCTURE DESTROY COMPLETED"
+              summary = (
+                  ":white_check_mark: *Terraform destroy completed successfully.* "
+                  "The selected environment's planned S3 buckets were checked before "
+                  "destruction."
+              )
+          elif destroy_outcome == "failure":
+              emoji, color = "🚨", "#E01E5A"
+              title = "TERRAFORM DESTROY FAILED"
+              summary = (
+                  ":rotating_light: Terraform destroy failed. Depending on the error, "
+                  "some resources may already have been removed. Check the run and "
+                  "destroy log before taking further action."
               )
           else:
-              emoji = "⚠️"
-              color = "#ECB22E"
-              title = "Terraform Destroy Not Completed"
+              emoji, color = "⚠️", "#ECB22E"
+              title = "DESTROY NOT COMPLETED"
               summary = (
-                  "The destroy operation was skipped, cancelled, or did not "
-                  "reach its expected completion state."
+                  ":warning: The destroy operation was skipped, cancelled, or did not "
+                  "reach a final success state. Check the workflow run for the cause."
               )
 
           def status(value):
               labels = {
-                  "success": "✅ Success",
-                  "failure": "❌ Failed",
+                  "success": "🟢 Success",
+                  "failure": "🔴 Failed",
                   "cancelled": "⚪ Cancelled",
-                  "skipped": "⏭️ Already clean",
+                  "skipped": "⏭️ Skipped / not reached",
                   "unknown": "⚪ Not reached",
               }
-              return labels.get(value, f"⚪ {value.title()}")
+              return labels.get(value, f"⚪ {value}")
+
+          if cleanup_outcome == "success":
+              if bucket_count == "0":
+                  cleanup_detail = "ℹ️ No buckets scheduled for cleanup"
+              else:
+                  cleanup_detail = (
+                      f"🪣 *{bucket_count}* bucket(s) inspected\n"
+                      f"🟢 *{already_clean}* already clean  ·  "
+                      f"✅ *{cleaned}* cleaned & verified\n"
+                      f"🗂️ *{versions_deleted}* versions deleted  ·  "
+                      f"🏷️ *{markers_deleted}* delete markers removed"
+                  )
+          elif cleanup_outcome == "failure":
+              cleanup_detail = "🔴 Cleanup failed — see workflow logs"
+          else:
+              cleanup_detail = f"{status(cleanup_outcome)}"
 
           blocks = [
               {
                   "type": "header",
                   "text": {
                       "type": "plain_text",
-                      "text": f"{emoji} {title}",
+                      "text": f"{emoji}  NEON LENS  |  {title}",
                       "emoji": True,
+                  },
+              },
+              {
+                  "type": "section",
+                  "text": {"type": "mrkdwn", "text": summary},
+              },
+              {"type": "divider"},
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": ":gear: *DEPLOYMENT CONTEXT*",
+                  },
+                  "fields": [
+                      {"type": "mrkdwn", "text": f"*Environment*\n`{branch}`"},
+                      {"type": "mrkdwn", "text": f"*AWS Region*\n`{region}`"},
+                      {"type": "mrkdwn", "text": f"*Repository*\n`{repository}`"},
+                      {"type": "mrkdwn", "text": f"*Triggered by*\n`{actor}`"},
+                      {
+                          "type": "mrkdwn",
+                          "text": f"*Commit*\n<{commit_url}|`{commit_sha}`>",
+                      },
+                      {"type": "mrkdwn", "text": f"*State listing*\n{status(state_outcome)}"},
+                  ],
+              },
+              {"type": "divider"},
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": ":broom: *S3 PRE-DESTROY CLEANUP*\n" + cleanup_detail,
                   },
               },
               {
                   "type": "section",
                   "text": {
                       "type": "mrkdwn",
-                      "text": summary,
+                      "text": ":cloud: *TERRAFORM DESTROY*\n" + status(destroy_outcome),
                   },
-              },
-              {"type": "divider"},
-              {
-                  "type": "section",
-                  "fields": [
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Environment*\n`{branch}`",
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*AWS Region*\n`{region}`",
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*S3 Cleanup*\n{status(cleanup_outcome)}",
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Terraform Destroy*\n{status(destroy_outcome)}",
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*State Listing*\n{status(state_outcome)}",
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Triggered By*\n`{actor}`",
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Repository*\n`{repository}`",
-                      },
-                      {
-                          "type": "mrkdwn",
-                          "text": f"*Commit*\n`{commit_sha}`",
-                      },
-                  ],
               },
               {"type": "divider"},
               {
@@ -772,14 +789,15 @@ jobs:
                   "elements": [
                       {
                           "type": "button",
-                          "text": {
-                              "type": "plain_text",
-                              "text": "View Workflow Run",
-                              "emoji": True,
-                          },
+                          "text": {"type": "plain_text", "text": "Open Workflow Run", "emoji": True},
                           "url": run_url,
-                          "style": "primary" if destroy_outcome == "success" else "danger",
-                      }
+                          "style": "primary",
+                      },
+                      {
+                          "type": "button",
+                          "text": {"type": "plain_text", "text": "View Commit", "emoji": True},
+                          "url": commit_url,
+                      },
                   ],
               },
               {
@@ -787,20 +805,15 @@ jobs:
                   "elements": [
                       {
                           "type": "mrkdwn",
-                          "text": "Neon Lens • Infrastructure Operations",
+                          "text": "🎨 *Neon Lens*  ·  Infrastructure Operations  ·  GitHub Actions",
                       }
                   ],
               },
           ]
 
           payload = {
-              "text": f"{emoji} {title} | {repository} | {branch}",
-              "attachments": [
-                  {
-                      "color": color,
-                      "blocks": blocks,
-                  }
-              ],
+              "text": f"{emoji} Neon Lens | {title} | {repository} | {branch}",
+              "attachments": [{"color": color, "blocks": blocks}],
           }
 
           request = urllib.request.Request(
@@ -812,7 +825,7 @@ jobs:
 
           try:
               with urllib.request.urlopen(request, timeout=15) as response:
-                  print(f"Slack notification sent: HTTP {response.status}")
+                  print(f"Slack notification sent successfully (HTTP {response.status}).")
           except urllib.error.HTTPError as error:
               body = error.read().decode("utf-8", errors="replace")
               print(f"Slack webhook failed: HTTP {error.code} - {body}")
@@ -820,4 +833,5 @@ jobs:
           except urllib.error.URLError as error:
               print(f"Could not reach Slack webhook: {error}")
               raise
-          PY
+          PYTHON
+
