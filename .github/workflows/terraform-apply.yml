@@ -394,6 +394,48 @@ jobs:
             -auto-approve \
             plan.out
 
+      - name: Create post-apply metadata
+        if: ${{ steps.terraform-apply.outcome == 'success' && contains(fromJSON('["dev","pre","prod"]'), inputs.branch) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUCKET="$(terraform output -raw frontend_bucket_name)"
+          DISTRIBUTION_ID="$(terraform output -raw cloudfront_distribution_id)"
+
+          [[ -n "$BUCKET" && "$BUCKET" != "null" ]] || {
+            echo "::error::Terraform output frontend_bucket_name is empty."
+            exit 1
+          }
+          [[ -n "$DISTRIBUTION_ID" && "$DISTRIBUTION_ID" != "null" ]] || {
+            echo "::error::Terraform output cloudfront_distribution_id is empty."
+            exit 1
+          }
+
+          mkdir -p apply-metadata
+          jq -n \
+            --arg environment "${{ inputs.branch }}" \
+            --arg frontend_bucket_name "$BUCKET" \
+            --arg cloudfront_distribution_id "$DISTRIBUTION_ID" \
+            '{
+              environment: $environment,
+              frontend_bucket_name: $frontend_bucket_name,
+              cloudfront_distribution_id: $cloudfront_distribution_id
+            }' > apply-metadata/metadata.json
+
+          echo "Created metadata for environment '${{ inputs.branch }}'."
+          echo "Resource identifiers are not printed."
+
+      - name: Upload post-apply metadata
+        if: ${{ steps.terraform-apply.outcome == 'success' && contains(fromJSON('["dev","pre","prod"]'), inputs.branch) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-apply-metadata
+          path: apply-metadata/metadata.json
+          if-no-files-found: error
+          retention-days: 1
+
+
      
       - name: Discover and validate frontend resources
         id: frontend-resources

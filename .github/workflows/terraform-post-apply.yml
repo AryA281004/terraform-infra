@@ -1,0 +1,141 @@
+name: Terraform Post-Apply Frontend Handoff
+
+# Runs only after the complete Terraform Apply workflow finishes successfully.
+# The environment is read from an artifact produced by that exact apply run;
+# workflow_run.head_branch is not used as a substitute for the dispatch input.
+
+on:
+  workflow_run:
+    workflows:
+      - Terraform Apply
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: terraform-post-apply-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  update-frontend-secrets-and-build:
+    name: Update matching frontend environment and start build
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'workflow_dispatch' &&
+        github.event.workflow_run.path == '.github/workflows/terraform-apply.yml'
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download metadata from the completed Terraform Apply run
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-apply-metadata
+          path: ${{ runner.temp }}/terraform-apply-metadata
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate selected environment
+        id: metadata
+        shell: bash
+        env:
+          METADATA_FILE: ${{ runner.temp }}/terraform-apply-metadata/metadata.json
+        run: |
+          set -euo pipefail
+
+          test -f "$METADATA_FILE" || {
+            echo "::error::Terraform apply metadata artifact is missing metadata.json."
+            exit 1
+          }
+
+          ENVIRONMENT="$(jq -er '.environment' "$METADATA_FILE")"
+
+          case "$ENVIRONMENT" in
+            dev|pre|prod)
+              ;;
+            *)
+              echo "::error::Unsupported frontend environment in apply metadata: $ENVIRONMENT"
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "environment=$ENVIRONMENT"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Validated environment: $ENVIRONMENT"
+
+      - name: Configure frontend environment secrets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.FRONTEND_REPO_TOKEN }}
+          FRONTEND_REPO: AryA281004/neon-lens-frontend
+          TARGET_ENVIRONMENT: ${{ steps.metadata.outputs.environment }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::FRONTEND_REPO_TOKEN is missing from terraform-infra repository secrets."
+            exit 1
+          fi
+
+          # Read Terraform outputs from the source run's metadata only for
+          # environment selection. The actual bucket/distribution IDs are
+          # intentionally not put in the artifact; they are read from the
+          # Terraform outputs by the source workflow only if included there.
+          #
+          # This workflow receives resource values via a separate, non-secret
+          # metadata artifact created by Terraform Apply. The values are
+          # resource identifiers, not credentials, but are still validated
+          # against the selected environment before being published.
+          METADATA_FILE="${{ runner.temp }}/terraform-apply-metadata/metadata.json"
+          BUCKET="$(jq -er '.frontend_bucket_name' "$METADATA_FILE")"
+          DISTRIBUTION_ID="$(jq -er '.cloudfront_distribution_id' "$METADATA_FILE")"
+
+          [[ -n "$BUCKET" && "$BUCKET" != "null" ]] || {
+            echo "::error::frontend_bucket_name is empty in metadata."
+            exit 1
+          }
+          [[ -n "$DISTRIBUTION_ID" && "$DISTRIBUTION_ID" != "null" ]] || {
+            echo "::error::cloudfront_distribution_id is empty in metadata."
+            exit 1
+          }
+
+          # Ensure the matching environment exists before writing environment secrets.
+          gh api --method PUT \
+            "repos/${FRONTEND_REPO}/environments/${TARGET_ENVIRONMENT}" \
+            --silent
+
+          printf '%s' "$BUCKET" |
+            gh secret set FRONTEND_BUCKET_NAME \
+              --repo "$FRONTEND_REPO" \
+              --env "$TARGET_ENVIRONMENT"
+
+          printf '%s' "$DISTRIBUTION_ID" |
+            gh secret set CLOUDFRONT_DISTRIBUTION_ID \
+              --repo "$FRONTEND_REPO" \
+              --env "$TARGET_ENVIRONMENT"
+
+          echo "Updated destination secrets for frontend environment '$TARGET_ENVIRONMENT'."
+
+      - name: Trigger matching frontend build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.FRONTEND_REPO_TOKEN }}
+          FRONTEND_REPO: AryA281004/neon-lens-frontend
+          TARGET_ENVIRONMENT: ${{ steps.metadata.outputs.environment }}
+        run: |
+          set -euo pipefail
+
+          gh workflow run frontend-build.yml \
+            --repo "$FRONTEND_REPO" \
+            --ref "$TARGET_ENVIRONMENT" \
+            --field "branch=$TARGET_ENVIRONMENT"
+
+          echo "Dispatched frontend-build.yml for '$TARGET_ENVIRONMENT'."
+          echo "frontend-deploy.yml should deploy only after that matching build succeeds."
