@@ -3,7 +3,7 @@
 # ============================================================
 
 module "vpc" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//vpc?ref=v1.4.20"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//vpc?ref=v1.4.21"
 
   environment = var.environment
   vpc_name    = var.project_name
