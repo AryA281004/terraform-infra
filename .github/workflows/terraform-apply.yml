@@ -473,58 +473,8 @@ jobs:
           echo "Frontend resources validated for environment '$ENVIRONMENT'."
           echo "S3 bucket and distribution IDs are intentionally not printed."
 
-      - name: Configure frontend GitHub Environment secrets
-        if: ${{ steps.frontend-resources.outcome == 'success' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.FRONTEND_REPO_TOKEN }}
-          FRONTEND_REPO: AryA281004/neon-lens-frontend
-          TARGET_ENVIRONMENT: ${{ steps.frontend-resources.outputs.environment }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "::error::FRONTEND_REPO_TOKEN is missing from terraform-infra repository secrets."
-            exit 1
-          fi
-
-          BUCKET="$(terraform output -raw frontend_bucket_name)"
-          DISTRIBUTION_ID="$(terraform output -raw cloudfront_distribution_id)"
-
-          # Ensure the environment exists before attempting to write its environment secrets.
-          gh api --method PUT \
-            "repos/${FRONTEND_REPO}/environments/${TARGET_ENVIRONMENT}" \
-            --silent
-
-          printf '%s' "$BUCKET" |
-            gh secret set FRONTEND_BUCKET_NAME \
-              --repo "$FRONTEND_REPO" \
-              --env "$TARGET_ENVIRONMENT"
-
-          printf '%s' "$DISTRIBUTION_ID" |
-            gh secret set CLOUDFRONT_DISTRIBUTION_ID \
-              --repo "$FRONTEND_REPO" \
-              --env "$TARGET_ENVIRONMENT"
-
-          echo "Updated frontend destination secrets for environment '$TARGET_ENVIRONMENT'."
-
-      - name: Trigger matching frontend build and deployment
-        if: ${{ steps.frontend-resources.outcome == 'success' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.FRONTEND_REPO_TOKEN }}
-          FRONTEND_REPO: AryA281004/neon-lens-frontend
-          TARGET_ENVIRONMENT: ${{ steps.frontend-resources.outputs.environment }}
-        run: |
-          set -euo pipefail
-
-          gh workflow run frontend-build.yml \
-            --repo "$FRONTEND_REPO" \
-            --ref "$TARGET_ENVIRONMENT"
-
-          echo "Dispatched frontend build for '$TARGET_ENVIRONMENT'."
-          echo "The frontend deployment workflow will deploy only after that build succeeds."
-
+      
+      
 
       # ----------------------------------------------------------
       # Slack notification
