@@ -142,29 +142,6 @@ jobs:
 
           aws sts get-caller-identity
 
-      # ---------------------------------------------------------
-      # MongoDB Atlas credentials
-      # ---------------------------------------------------------
-      - name: Configure MongoDB Atlas credentials
-        shell: bash
-        env:
-          MONGODB_ATLAS_PUBLIC_KEY: ${{ secrets.MONGODB_ATLAS_PUBLIC_KEY }}
-          MONGODB_ATLAS_PRIVATE_KEY: ${{ secrets.MONGODB_ATLAS_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$MONGODB_ATLAS_PUBLIC_KEY" ]; then
-            echo "ERROR: MONGODB_ATLAS_PUBLIC_KEY is not configured"
-            exit 1
-          fi
-
-          if [ -z "$MONGODB_ATLAS_PRIVATE_KEY" ]; then
-            echo "ERROR: MONGODB_ATLAS_PRIVATE_KEY is not configured"
-            exit 1
-          fi
-
-          echo "TF_VAR_mongodb_atlas_public_key=$MONGODB_ATLAS_PUBLIC_KEY" >> "$GITHUB_ENV"
-          echo "TF_VAR_mongodb_atlas_private_key=$MONGODB_ATLAS_PRIVATE_KEY" >> "$GITHUB_ENV"
 
       # ---------------------------------------------------------
       # Terraform Init

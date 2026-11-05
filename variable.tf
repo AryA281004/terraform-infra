@@ -1,10 +1,6 @@
 # ============================================================
 # GENERAL
 # ============================================================
-
-
-
-
 variable "project_name" {
   description = "Project/application name."
   type        = string
@@ -32,7 +28,6 @@ variable "public_subnet_cidr" {
     az         = string
   }))
 }
-
 variable "private_subnet_cidr" {
   description = "Private subnet configuration."
   type = map(object({
@@ -41,8 +36,6 @@ variable "private_subnet_cidr" {
     nat_gateway_key = string
   }))
 }
-
-
 
 # ============================================================
 # ECS
@@ -53,13 +46,11 @@ variable "container_image" {
   type        = string
 }
 
-
 variable "container_port" {
   description = "Application container port."
   type        = number
   default     = 3000
 }
-
 
 variable "container_cpu" {
   description = "Container CPU."
@@ -67,13 +58,11 @@ variable "container_cpu" {
   default     = 512
 }
 
-
 variable "container_memory" {
   description = "Container memory."
   type        = number
   default     = 1024
 }
-
 
 variable "task_cpu" {
   description = "ECS task CPU."
@@ -81,13 +70,11 @@ variable "task_cpu" {
   default     = 512
 }
 
-
 variable "task_memory" {
   description = "ECS task memory."
   type        = number
   default     = 1024
 }
-
 
 variable "desired_count" {
   description = "Initial ECS desired count."
@@ -95,20 +82,17 @@ variable "desired_count" {
   default     = 2
 }
 
-
 variable "autoscaling_min_capacity" {
   description = "Minimum ECS tasks."
   type        = number
   default     = 2
 }
 
-
 variable "autoscaling_max_capacity" {
   description = "Maximum ECS tasks."
   type        = number
   default     = 6
 }
-
 
 # ============================================================
 # ROUTE 53
@@ -124,7 +108,6 @@ variable "domain_name" {
   }
 }
 
-
 variable "frontend_domain" {
   description = "Frontend custom domain pointing to CloudFront."
   type        = string
@@ -134,7 +117,6 @@ variable "frontend_domain" {
     error_message = "frontend_domain must not be empty."
   }
 }
-
 
 variable "backend_domain" {
   description = "Backend custom domain pointing to the Application Load Balancer."
@@ -234,44 +216,6 @@ variable "host_header_values" {
   type        = list(string)
   default     = []
 }
-
-variable "project_id" {
-  description = "MongoDB Atlas project ID."
-  type        = string
-  default     = null
-}
-
-variable "mongodb_atlas_public_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "mongodb_atlas_private_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "mongodb_atlas_project_id" {
-  description = "MongoDB Atlas project ID"
-  type        = string
-  sensitive   = true
-}
-
-variable "mongodb_atlas_region" {
-  description = "MongoDB Atlas region"
-  type        = string
-}
-
-variable "mongodb_atlas_vpc_cidr" {
-  description = "MongoDB Atlas VPC CIDR"
-  type        = string
-}
-
-variable "aws_account_id" {
-  description = "AWS account ID"
-  type        = string
-}
-
 variable "aws_region" {
   description = "AWS region"
   type        = string
@@ -304,8 +248,6 @@ variable "grafana_host_header_values" {
   type        = list(string)
   default     = []
 }
-
-
 variable "prometheus_domain" {
   description = "Prometheus custom domain pointing to the Application Load Balancer."
   type        = string
@@ -333,7 +275,6 @@ variable "prometheus_host_header_values" {
   type        = list(string)
   default     = []
 }
-
 
 # ============================================================
 # BLACKBOX EXPORTER SIDECAR
