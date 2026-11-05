@@ -114,3 +114,5 @@ grafana_host_header_values = [
 prometheus_host_header_values = [
   "prometheus-prod.aryandudhat.qd.je"
 ]
+
+mongodb_secret_arn = "arn:aws:secretsmanager:us-east-1:666729139368:secret:neonlens/prod/mongodb/credentials-3mHU5C"
