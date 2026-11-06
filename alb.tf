@@ -3,7 +3,7 @@
 # ============================================================
 
 module "alb" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//alb?ref=v2.0.0"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//alb?ref=v2.0.1"
 
   environment = var.environment
   name        = var.project_name

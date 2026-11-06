@@ -8,7 +8,7 @@
 # ============================================================
 
 module "mongodb" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//mongo_ec2?ref=v2.0.0"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//mongo_ec2?ref=v2.0.1"
 
   # ----------------------------------------------------------
   # ENVIRONMENT
