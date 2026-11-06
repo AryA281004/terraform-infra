@@ -3,7 +3,7 @@
 # ============================================================
 
 module "monitoring" {
-  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=v1.4.21"
+  source = "git::https://github.com/AryA281004/neonlens-tf-module.git//monitoring?ref=2.0.0"
 
   depends_on = [module.ecs]
 

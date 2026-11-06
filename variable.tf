@@ -304,6 +304,11 @@ variable "blackbox_exporter_memory" {
 
 }
 
+variable "aws_account_id" {
+  description = "AWS account ID"
+  type        = string
+}
+
 
 variable "mongodb_secret_arn" {
   description = "AWS Secrets Manager ARN containing MongoDB credentials."
